@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { es } from "@/locales/es";
+import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/components/ui/toast";
 import { Download } from "lucide-react";
 
 export default function ExportPage() {
   const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
   async function handleExport() {
     setLoading(true);
@@ -24,18 +27,20 @@ export default function ExportPage() {
     a.click();
     URL.revokeObjectURL(url);
     setLoading(false);
+    showToast(es.export.success);
   }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">{es.export.title}</h2>
-      <Card>
+      <PageHeader title={es.export.title} description={es.export.description} />
+      <Card className="border-border bg-surface-1">
         <CardHeader>
           <CardTitle>Excel (.xlsx)</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="mb-4 text-sm text-neutral-500">
-            Exporta el inventario con columnas compatibles con el formato legacy: CAJA #, CLASIFICACION, DESCRIPCION, PRESENTACION, CANT, UND MEDIDA.
+          <p className="mb-4 text-sm text-muted">
+            Exporta el inventario con columnas compatibles con el formato legacy: CAJA #,
+            CLASIFICACION, DESCRIPCION, PRESENTACION, CANT, UND MEDIDA.
           </p>
           <Button onClick={handleExport} disabled={loading}>
             <Download className="h-4 w-4" />

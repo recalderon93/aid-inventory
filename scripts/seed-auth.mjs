@@ -7,6 +7,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
@@ -16,7 +17,16 @@ function loadEnv() {
     const content = readFileSync(envPath, "utf8");
     for (const line of content.split("\n")) {
       const match = line.match(/^([^#=]+)=(.*)$/);
-      if (match) process.env[match[1].trim()] = match[2].trim();
+      if (match) {
+        let value = match[2].trim();
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.slice(1, -1);
+        }
+        process.env[match[1].trim()] = value;
+      }
     }
   } catch {
     // ignore
@@ -33,8 +43,16 @@ if (!url || !serviceKey) {
   process.exit(1);
 }
 
+if (!url.startsWith("https://") || !url.includes(".supabase.co")) {
+  console.error(
+    "NEXT_PUBLIC_SUPABASE_URL looks invalid. Use only the Project URL, e.g. https://abcdefgh.supabase.co"
+  );
+  process.exit(1);
+}
+
 const supabase = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
+  realtime: { transport: ws },
 });
 
 const users = [

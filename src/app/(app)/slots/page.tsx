@@ -3,19 +3,27 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { filterSlots, hasExactSlotMatch } from "@/lib/slot-search";
+import { useUserProfile } from "@/contexts/user-profile-context";
+import { canCreateSlots } from "@/lib/permissions";
 import { es } from "@/locales/es";
+import { PageHeader } from "@/components/page-header";
+import { ListSkeleton } from "@/components/list-skeleton";
+import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/toast";
 import type { Slot } from "@/types/database";
-import { Plus } from "lucide-react";
+import { Boxes } from "lucide-react";
 
 export default function SlotsPage() {
+  const { profile } = useUserProfile();
+  const { showToast } = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [newNumber, setNewNumber] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function loadSlots() {
@@ -33,66 +41,68 @@ export default function SlotsPage() {
     loadSlots();
   }, []);
 
-  async function handleCreate() {
-    const number = newNumber.trim();
-    if (!number) return;
+  async function handleCreate(number?: string) {
+    const n = (number ?? search).trim();
+    if (!n) return;
     setCreating(true);
     const supabase = createClient();
     await supabase.from("slots").insert({
-      number,
-      name: `Caja ${number}`,
+      number: n,
+      name: n,
       status: "active",
     });
-    setNewNumber("");
     setCreating(false);
+    showToast(es.slots.created_success);
     await loadSlots();
   }
 
-  const filtered = slots.filter((s) => s.number.includes(search.trim()));
+  const filtered = filterSlots(slots, search);
+  const showCreateBanner =
+    search.trim() &&
+    !hasExactSlotMatch(slots, search) &&
+    profile &&
+    canCreateSlots(profile.role);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">{es.slots.title}</h2>
-        <Link href="/inventory/add">
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            {es.inventory.addDonation}
-          </Button>
-        </Link>
-      </div>
+      <PageHeader title={es.slots.title} description={es.slots.description} />
 
       <Input
         placeholder={es.slots.searchPlaceholder}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
+      <p className="text-xs text-muted">{es.slots.searchHint}</p>
 
-      <div className="flex gap-2">
-        <Input
-          placeholder={es.slots.number}
-          value={newNumber}
-          onChange={(e) => setNewNumber(e.target.value)}
-        />
-        <Button onClick={handleCreate} disabled={creating} variant="secondary">
-          {es.slots.create}
+      {showCreateBanner && (
+        <Button variant="outline" className="w-full" onClick={() => handleCreate()} disabled={creating}>
+          {es.slots.createFromSearch.replace("{number}", search.trim())}
         </Button>
-      </div>
+      )}
 
       {loading ? (
-        <p>{es.app.loading}</p>
+        <ListSkeleton variant="grid" count={6} />
       ) : filtered.length === 0 ? (
-        <p className="text-neutral-500">{es.slots.empty}</p>
+        <EmptyState
+          icon={Boxes}
+          title={es.slots.empty}
+          description={es.slots.emptyDescription}
+          action={
+            profile && canCreateSlots(profile.role) ? (
+              <Button size="sm" onClick={() => handleCreate("1")} disabled={creating}>
+                {es.slots.create}
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {filtered.map((slot) => (
             <Link key={slot.id} href={`/slots/${slot.id}`}>
-              <Card className="transition hover:border-neutral-400">
+              <Card className="border-border bg-surface-1 transition hover:border-foreground motion-safe:animate-in">
                 <CardContent className="flex flex-col items-center gap-2 p-4">
                   <span className="text-2xl font-bold">{slot.number}</span>
-                  <Badge variant="secondary">
-                    {es.slots.statuses[slot.status]}
-                  </Badge>
+                  <Badge variant="secondary">{es.slots.statuses[slot.status]}</Badge>
                 </CardContent>
               </Card>
             </Link>
