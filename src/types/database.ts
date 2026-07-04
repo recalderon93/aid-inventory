@@ -3,7 +3,7 @@ export type UserStatus = "active" | "inactive" | "on_hold" | "disabled";
 export type SlotStatus = "active" | "inactive" | "archived" | "shipped" | "reserved";
 export type DonationItemStatus = "active" | "out_of_stock" | "needed" | "archived";
 export type OrderStatus = "draft" | "pending" | "in_progress" | "ready_for_pickup" | "completed" | "cancelled";
-export type OrderItemStatus = "pending" | "partially_fulfilled" | "fulfilled" | "unavailable" | "cancelled";
+export type OrderItemStatus = "pending" | "partially_fulfilled" | "fulfilled" | "unavailable" | "cancelled" | "issue";
 export type InventoryTransactionType =
   | "inbound"
   | "outbound"
@@ -11,7 +11,8 @@ export type InventoryTransactionType =
   | "adjustment"
   | "order_fulfillment"
   | "slot_deactivation"
-  | "slot_shipment";
+  | "slot_shipment"
+  | "merma";
 
 export type ImportReviewStatus = "PENDING_REVIEW" | "IN_REVIEW" | "RESOLVED" | "IGNORED";
 
@@ -120,7 +121,9 @@ export interface InventoryTransaction {
   from_slot_id: string | null;
   to_slot_id: string | null;
   order_id: string | null;
+  order_item_id: string | null;
   quantity: number;
+  reason: string | null;
   created_by_user_id: string | null;
   notes: string | null;
   created_at: string;
@@ -140,6 +143,7 @@ export interface Order {
   requester_state: string | null;
   requester_notes: string | null;
   status: OrderStatus;
+  has_issues?: boolean;
   created_by_user_id: string | null;
   prepared_by_user_id: string | null;
   completed_by_user_id: string | null;
@@ -156,7 +160,28 @@ export interface OrderItem {
   requested_quantity: number;
   fulfilled_quantity: number;
   status: OrderItemStatus;
+  issue_reason: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
   donation_item?: DonationItem;
+}
+
+export interface OrderItemPick {
+  id: string;
+  order_id: string;
+  order_item_id: string;
+  donation_item_id: string;
+  slot_id: string;
+  quantity: number;
+  status: "draft" | "confirmed" | "cancelled";
+  inventory_transaction_id: string | null;
+  picked_by_user_id: string | null;
+  picked_at: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  slot?: Slot;
 }
 
 export const VENEZUELAN_STATES = [

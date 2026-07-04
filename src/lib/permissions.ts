@@ -21,7 +21,7 @@ export function canViewOrders(role: UserRole) {
 }
 
 export function canCreateOrders(role: UserRole) {
-  return role === "admin" || role === "staff";
+  return role === "admin" || role === "staff" || role === "collaborator";
 }
 
 export function canEditOrders(role: UserRole) {
@@ -38,6 +38,37 @@ export function canRegisterDonations(role: UserRole) {
 
 export function canManageOrders(role: UserRole) {
   return canCreateOrders(role);
+}
+
+export function canRecordMerma(role: UserRole) {
+  return role === "admin" || role === "staff" || role === "collaborator";
+}
+
+export function canMarkOrderItemIssue(role: UserRole) {
+  return role === "admin" || role === "staff" || role === "collaborator";
+}
+
+export function canCompleteOrderWithIssues(role: UserRole) {
+  return role === "admin" || role === "staff";
+}
+
+export function canReassignOrder(role: UserRole) {
+  return role === "admin";
+}
+
+export function canCancelOrder(role: UserRole) {
+  return role === "admin" || role === "staff";
+}
+
+export function canPickOnOrder(
+  role: UserRole,
+  preparedByUserId: string | null,
+  currentUserId: string | null
+) {
+  if (!canHandleOrders(role) || !currentUserId) return false;
+  if (role === "admin") return true;
+  if (!preparedByUserId) return true;
+  return preparedByUserId === currentUserId;
 }
 
 export function inferCategory(subcategory: string): string {

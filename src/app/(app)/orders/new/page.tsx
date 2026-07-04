@@ -2,16 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { generateOrderNumber, canCreateOrders } from "@/lib/permissions";
+import { queryKeys } from "@/lib/query-keys";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { es } from "@/locales/es";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DonationItemPreview } from "@/components/donation-item-preview";
+import { StepProgress } from "@/components/step-progress";
+import { useToast } from "@/components/ui/toast";
 import { VENEZUELAN_STATES, type DonationItem } from "@/types/database";
+import { Trash2 } from "lucide-react";
 
 interface OrderLine {
   donation_item_id: string;
@@ -25,8 +31,16 @@ interface OrderLine {
   available: number;
 }
 
+const STEPS = [
+  { label: es.orders.destination },
+  { label: es.orders.stepItems },
+  { label: es.orders.stepReview },
+];
+
 export default function NewOrderPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const { profile, loading: profileLoading } = useUserProfile();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [requester, setRequester] = useState({
@@ -69,6 +83,11 @@ export default function NewOrderPage() {
   }, [itemSearch]);
 
   async function addLine(item: DonationItem) {
+    if (lines.some((l) => l.donation_item_id === item.id)) {
+      showToast(es.orders.addItem);
+      return;
+    }
+
     const supabase = createClient();
     const { data: inv } = await supabase
       .from("inventory")
@@ -76,27 +95,39 @@ export default function NewOrderPage() {
       .eq("donation_item_id", item.id);
     const available = (inv ?? []).reduce((s, r) => s + r.quantity, 0);
 
-    if (lines.some((l) => l.donation_item_id === item.id)) return;
-
-    setLines([...lines, {
-      donation_item_id: item.id,
-      description: item.description,
-      presentation: item.presentation,
-      unit_of_measurement: item.unit_of_measurement,
-      subcategory: item.subcategory,
-      category: item.category,
-      status: item.status,
-      requested_quantity: 1,
-      available,
-    }]);
+    setLines((prev) => [
+      ...prev,
+      {
+        donation_item_id: item.id,
+        description: item.description,
+        presentation: item.presentation,
+        unit_of_measurement: item.unit_of_measurement,
+        subcategory: item.subcategory,
+        category: item.category,
+        status: item.status,
+        requested_quantity: 1,
+        available,
+      },
+    ]);
     setItemSearch("");
     setSearchResults([]);
   }
 
+  function removeLine(donationItemId: string) {
+    setLines((prev) => prev.filter((l) => l.donation_item_id !== donationItemId));
+  }
+
   async function handleSubmit() {
+    if (lines.length === 0) {
+      showToast(es.orders.noItemsError);
+      return;
+    }
+
     setSaving(true);
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     const { data: order, error } = await supabase
       .from("orders")
@@ -111,36 +142,62 @@ export default function NewOrderPage() {
 
     if (error || !order) {
       setSaving(false);
+      showToast(error?.message ?? es.orders.createError);
       return;
     }
 
-    await supabase.from("order_items").insert(
+    const { error: itemsError } = await supabase.from("order_items").insert(
       lines.map((line) => ({
         order_id: order.id,
         donation_item_id: line.donation_item_id,
         requested_quantity: line.requested_quantity,
-        status: line.available >= line.requested_quantity ? "pending" : "unavailable",
+        fulfilled_quantity: 0,
+        status: "pending" as const,
       }))
     );
 
+    if (itemsError) {
+      await supabase.from("orders").delete().eq("id", order.id);
+      setSaving(false);
+      showToast(itemsError.message ?? es.orders.createError);
+      return;
+    }
+
+    await queryClient.invalidateQueries({ queryKey: queryKeys.ordersPending() });
     setSaving(false);
+    showToast(es.orders.created_success);
     router.push(`/orders/${order.id}`);
   }
+
+  const stepHeader = (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-bold">{es.orders.create}</h2>
+      <StepProgress
+        steps={STEPS}
+        currentStep={step}
+        stepLabel={es.inventory.stepOf.replace("{current}", String(step)).replace("{total}", "3")}
+      />
+    </div>
+  );
 
   if (step === 1) {
     return (
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">{es.orders.create}</h2>
+        {stepHeader}
         <Card>
-          <CardHeader><CardTitle>{es.orders.requester}</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>{es.orders.destination}</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-3">
-            {([
-              ["requester_name", es.orders.requesterName],
-              ["requester_phone", es.orders.phone],
-              ["requester_email", es.orders.email],
-              ["requester_address", es.orders.address],
-              ["requester_city", es.orders.city],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ["requester_name", es.orders.requesterName],
+                ["requester_phone", es.orders.phone],
+                ["requester_email", es.orders.email],
+                ["requester_address", es.orders.address],
+                ["requester_city", es.orders.city],
+              ] as const
+            ).map(([key, label]) => (
               <div key={key} className="space-y-1">
                 <Label>{label}</Label>
                 <Input
@@ -152,16 +209,17 @@ export default function NewOrderPage() {
             ))}
             <div className="space-y-1">
               <Label>{es.orders.state}</Label>
-              <select
-                className="h-11 w-full rounded-lg border border-neutral-300 px-3 dark:border-neutral-700 dark:bg-neutral-950"
+              <Select
                 value={requester.requester_state}
                 onChange={(e) => setRequester({ ...requester, requester_state: e.target.value })}
               >
                 <option value="">—</option>
                 {VENEZUELAN_STATES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>{es.orders.notes}</Label>
@@ -182,7 +240,7 @@ export default function NewOrderPage() {
   if (step === 2) {
     return (
       <div className="space-y-4">
-        <h2 className="text-2xl font-bold">{es.orders.items}</h2>
+        {stepHeader}
         <Input
           placeholder={es.inventory.searchPlaceholder}
           value={itemSearch}
@@ -208,7 +266,10 @@ export default function NewOrderPage() {
         ))}
         <div className="space-y-2">
           {lines.map((line, i) => (
-            <div key={line.donation_item_id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-1 p-3">
+            <div
+              key={line.donation_item_id}
+              className="flex items-center gap-2 rounded-lg border border-border bg-surface-1 p-3"
+            >
               <div className="min-w-0 flex-1">
                 <DonationItemPreview
                   description={line.description}
@@ -235,26 +296,53 @@ export default function NewOrderPage() {
                   setLines(updated);
                 }}
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => removeLine(line.donation_item_id)}
+                aria-label={es.orders.removeItem}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           ))}
         </div>
-        <Button onClick={() => setStep(3)} disabled={lines.length === 0}>
-          {es.orders.review}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setStep(1)}>
+            {es.orders.back}
+          </Button>
+          <Button onClick={() => setStep(3)} disabled={lines.length === 0}>
+            {es.orders.review}
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">{es.orders.review}</h2>
+      {stepHeader}
       <Card>
         <CardContent className="space-y-2 pt-4">
-          <p><strong>{es.orders.requesterName}:</strong> {requester.requester_name}</p>
-          <p><strong>{es.orders.phone}:</strong> {requester.requester_phone}</p>
-          <p><strong>{es.orders.state}:</strong> {requester.requester_state}</p>
+          <p>
+            <strong>{es.orders.requesterName}:</strong> {requester.requester_name}
+          </p>
+          {requester.requester_phone && (
+            <p>
+              <strong>{es.orders.phone}:</strong> {requester.requester_phone}
+            </p>
+          )}
+          {requester.requester_state && (
+            <p>
+              <strong>{es.orders.state}:</strong> {requester.requester_state}
+            </p>
+          )}
           {lines.map((line) => (
-            <div key={line.donation_item_id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+            <div
+              key={line.donation_item_id}
+              className="border-b border-border pb-3 last:border-0 last:pb-0"
+            >
               <DonationItemPreview
                 description={line.description}
                 presentation={line.presentation}
@@ -269,9 +357,14 @@ export default function NewOrderPage() {
               </p>
             </div>
           ))}
-          <Button onClick={handleSubmit} disabled={saving}>
-            {saving ? es.app.loading : es.orders.submit}
-          </Button>
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={() => setStep(2)}>
+              {es.orders.back}
+            </Button>
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving ? es.app.loading : es.orders.submit}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
