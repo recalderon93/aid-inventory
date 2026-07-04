@@ -27,7 +27,9 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  const pathname = request.nextUrl.pathname;
+  const isAuthRoute =
+    pathname.startsWith("/login") || pathname.startsWith("/auth/reset-password");
   const isPublicRoute = isAuthRoute;
 
   if (!user && !isPublicRoute) {
@@ -36,10 +38,23 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  if (user && pathname.startsWith("/login") && !pathname.startsWith("/login/forgot-password")) {
     const url = request.nextUrl.clone();
     url.pathname = "/slots";
     return NextResponse.redirect(url);
+  }
+
+  if (user && pathname.startsWith("/users")) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/slots";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;
