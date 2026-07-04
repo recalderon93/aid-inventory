@@ -35,8 +35,8 @@ yarn-error.log*
 !.env.example
 
 # private notes and secrets (local only)
-docs/private/
-private/
+/docs/private/
+/private/
 
 # local inventory data — generate with npm run import:clean
 supabase/seed/*.csv
