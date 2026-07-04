@@ -1,4 +1,5 @@
 export type UserRole = "admin" | "staff" | "collaborator";
+export type UserStatus = "active" | "inactive" | "on_hold" | "disabled";
 export type SlotStatus = "active" | "inactive" | "archived" | "shipped" | "reserved";
 export type DonationItemStatus = "active" | "out_of_stock" | "needed" | "archived";
 export type OrderStatus = "draft" | "pending" | "in_progress" | "ready_for_pickup" | "completed" | "cancelled";
@@ -15,9 +16,36 @@ export type InventoryTransactionType =
 export interface Profile {
   id: string;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
   email: string;
+  phone: string | null;
   role: UserRole;
-  status: string;
+  status: UserStatus;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  last_login_at: string | null;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  actor_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface OrderHistory {
+  id: string;
+  order_id: string;
+  changed_by: string | null;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
 }
 
 export interface Slot {

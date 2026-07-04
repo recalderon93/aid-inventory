@@ -12,8 +12,28 @@ export function canManageInventory(role: UserRole) {
   return role === "admin" || role === "staff" || role === "collaborator";
 }
 
-export function canManageOrders(role: UserRole) {
+export function canViewOrders(role: UserRole) {
   return role === "admin" || role === "staff" || role === "collaborator";
+}
+
+export function canCreateOrders(role: UserRole) {
+  return role === "admin" || role === "staff";
+}
+
+export function canEditOrders(role: UserRole) {
+  return role === "admin" || role === "staff";
+}
+
+export function canHandleOrders(role: UserRole) {
+  return role === "admin" || role === "staff" || role === "collaborator";
+}
+
+export function canRegisterDonations(role: UserRole) {
+  return role === "admin" || role === "staff" || role === "collaborator";
+}
+
+export function canManageOrders(role: UserRole) {
+  return canCreateOrders(role);
 }
 
 export function inferCategory(subcategory: string): string {
@@ -56,4 +76,20 @@ export function generateOrderNumber() {
   const date = now.toISOString().slice(0, 10).replace(/-/g, "");
   const rand = Math.floor(Math.random() * 9000 + 1000);
   return `ORD-${date}-${rand}`;
+}
+
+export function getOrderStatusVariant(
+  status: string
+): "default" | "secondary" | "success" | "warning" | "destructive" {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "in_progress":
+    case "ready_for_pickup":
+      return "warning";
+    case "cancelled":
+      return "destructive";
+    default:
+      return "secondary";
+  }
 }
