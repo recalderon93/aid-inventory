@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  canCancelOrder,
+  canCompleteOrderWithIssues,
   canCreateOrders,
   canCreateSlots,
   canHandleOrders,
   canManageUsers,
   canManageImportReview,
+  canPickOnOrder,
+  canRecordMerma,
+  canReassignOrder,
   canRegisterDonations,
   getOrderStatusVariant,
   inferCategory,
@@ -32,15 +37,53 @@ describe("permissions", () => {
       }
     });
 
-    it("only admin and staff can create orders", () => {
+    it("admin, staff, and collaborators can create orders", () => {
       expect(canCreateOrders("admin")).toBe(true);
       expect(canCreateOrders("staff")).toBe(true);
-      expect(canCreateOrders("collaborator")).toBe(false);
+      expect(canCreateOrders("collaborator")).toBe(true);
     });
 
-    it("collaborators can handle orders but not create them", () => {
+    it("collaborators can handle orders", () => {
       expect(canHandleOrders("collaborator")).toBe(true);
-      expect(canCreateOrders("collaborator")).toBe(false);
+    });
+  });
+
+  describe("order fulfillment permissions", () => {
+    it("admin can pick on any order", () => {
+      expect(canPickOnOrder("admin", "other-user", "current-user")).toBe(true);
+    });
+
+    it("staff can pick on assigned order", () => {
+      expect(canPickOnOrder("staff", "current-user", "current-user")).toBe(true);
+      expect(canPickOnOrder("staff", "other-user", "current-user")).toBe(false);
+    });
+
+    it("staff can pick unassigned order", () => {
+      expect(canPickOnOrder("staff", null, "current-user")).toBe(true);
+    });
+
+    it("all handlers can record merma", () => {
+      for (const role of ["admin", "staff", "collaborator"] as const) {
+        expect(canRecordMerma(role)).toBe(true);
+      }
+    });
+
+    it("only admin and staff can complete with issues", () => {
+      expect(canCompleteOrderWithIssues("admin")).toBe(true);
+      expect(canCompleteOrderWithIssues("staff")).toBe(true);
+      expect(canCompleteOrderWithIssues("collaborator")).toBe(false);
+    });
+
+    it("only admin and staff can cancel orders", () => {
+      expect(canCancelOrder("admin")).toBe(true);
+      expect(canCancelOrder("staff")).toBe(true);
+      expect(canCancelOrder("collaborator")).toBe(false);
+    });
+
+    it("only admin can reassign orders", () => {
+      expect(canReassignOrder("admin")).toBe(true);
+      expect(canReassignOrder("staff")).toBe(false);
+      expect(canReassignOrder("collaborator")).toBe(false);
     });
   });
 

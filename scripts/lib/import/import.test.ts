@@ -6,6 +6,33 @@ import { matchNota1Row, createNota1Order } from "./match-nota1";
 import type { ClassifiedRow, DonationItemRecord, InventoryRecord } from "./types";
 import { itemId, slotId } from "./uuid";
 
+describe("productKey", () => {
+  const base = {
+    description: "ACETAMINOFEN",
+    category: "MEDICINAS",
+    subcategory: "ANALGÉSICOS",
+    unitOfMeasure: "UNDS",
+  };
+
+  it("keeps different presentations as different products", () => {
+    const key500 = productKey({ ...base, presentation: "500 MG" });
+    const key650 = productKey({ ...base, presentation: "650 MG" });
+    expect(key500).not.toBe(key650);
+  });
+
+  it("keeps different units as different products", () => {
+    const key10 = productKey({ ...base, presentation: "500 MG", unitOfMeasure: "CAJA 10" });
+    const key100 = productKey({ ...base, presentation: "500 MG", unitOfMeasure: "CAJA 100" });
+    expect(key10).not.toBe(key100);
+  });
+
+  it("treats accented and unaccented descriptions as same product key", () => {
+    const accented = productKey({ ...base, description: "ANTIBIÓTICO", presentation: "500 MG" });
+    const plain = productKey({ ...base, description: "ANTIBIOTICO", presentation: "500 MG" });
+    expect(accented).toBe(plain);
+  });
+});
+
 describe("normalizeForMatch", () => {
   it("treats accented and unaccented text as equivalent", () => {
     expect(normalizeForMatch("ANTIBIÓTICOS")).toBe(normalizeForMatch("ANTIBIOTICOS"));
