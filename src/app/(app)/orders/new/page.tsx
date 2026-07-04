@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { generateOrderNumber } from "@/lib/permissions";
+import { generateOrderNumber, canCreateOrders } from "@/lib/permissions";
+import { useUserProfile } from "@/contexts/user-profile-context";
 import { es } from "@/locales/es";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ interface OrderLine {
 
 export default function NewOrderPage() {
   const router = useRouter();
+  const { profile, loading: profileLoading } = useUserProfile();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [requester, setRequester] = useState({
     requester_name: "",
@@ -34,6 +36,13 @@ export default function NewOrderPage() {
   const [searchResults, setSearchResults] = useState<DonationItem[]>([]);
   const [lines, setLines] = useState<OrderLine[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (profileLoading) return;
+    if (!profile || !canCreateOrders(profile.role)) {
+      router.replace("/orders");
+    }
+  }, [profile, profileLoading, router]);
 
   useEffect(() => {
     if (itemSearch.length < 2) {
