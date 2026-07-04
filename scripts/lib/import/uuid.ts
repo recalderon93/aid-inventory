@@ -42,6 +42,12 @@ export function orderId(orderNumber: string): string {
   return deterministicId(`order-${orderNumber}`);
 }
 
-export function orderItemId(orderIdValue: string, itemIdValue: string, slotIdValue: string): string {
-  return deterministicId(`order-item-${orderIdValue}-${itemIdValue}-${slotIdValue}`);
+export function orderItemId(
+  orderIdValue: string,
+  itemIdValue: string,
+  slotIdValue: string,
+  rowNumber?: number
+): string {
+  const suffix = rowNumber != null ? `-${rowNumber}` : "";
+  return deterministicId(`order-item-${orderIdValue}-${itemIdValue}-${slotIdValue}${suffix}`);
 }

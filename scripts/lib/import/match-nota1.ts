@@ -166,7 +166,7 @@ export function matchNota1Row(
     };
   }
 
-  const oItemId = orderItemId(order.id, unique.product.id, unique.slotId);
+  const oItemId = orderItemId(order.id, unique.product.id, unique.slotId, row.rowNumber);
   const orderItem: OrderItemRecord = {
     id: oItemId,
     orderId: order.id,

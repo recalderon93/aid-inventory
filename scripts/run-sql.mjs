@@ -8,7 +8,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import pg from "pg";
-import { loadEnvFromArg } from "./lib/load-env.mjs";
+import { loadEnvFromArg, loadEnvFileOverride } from "./lib/load-env.mjs";
 
 const { Client } = pg;
 
@@ -38,14 +38,23 @@ async function main() {
     process.exit(1);
   }
 
-  loadEnvFromArg(envFile);
+  if (envFile) {
+    loadEnvFileOverride(envFile);
+  } else {
+    loadEnvFromArg(null);
+  }
   const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
   if (!dbUrl) {
     console.error("Missing SUPABASE_DB_URL or DATABASE_URL.");
     process.exit(1);
   }
 
-  const client = new Client({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
+  const client = new Client({
+    connectionString: dbUrl,
+    ssl: { rejectUnauthorized: false },
+    // Supabase direct DB host is IPv6-only on some projects.
+    ...(dbUrl.includes(".supabase.co") ? { family: 6 } : {}),
+  });
   await client.connect();
 
   try {
