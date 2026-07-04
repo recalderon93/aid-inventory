@@ -24,7 +24,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
-import { ChevronRight, LogOut, Pencil, Users } from "lucide-react";
+import { ChevronRight, ClipboardList, LogOut, Pencil, Users } from "lucide-react";
 
 type MenuView = "main" | "password";
 
@@ -174,12 +174,20 @@ export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
                   {es.menu.changePassword}
                 </Button>
                 {canManageUsers(profile.role) && (
-                  <Link href="/users" onClick={() => onOpenChange(false)}>
-                    <Button variant="outline" className="w-full justify-start">
-                      <Users className="h-4 w-4" />
-                      {es.menu.userManagement}
-                    </Button>
-                  </Link>
+                  <>
+                    <Link href="/users" onClick={() => onOpenChange(false)}>
+                      <Button variant="outline" className="w-full justify-start">
+                        <Users className="h-4 w-4" />
+                        {es.menu.userManagement}
+                      </Button>
+                    </Link>
+                    <Link href="/import-review" onClick={() => onOpenChange(false)}>
+                      <Button variant="outline" className="w-full justify-start">
+                        <ClipboardList className="h-4 w-4" />
+                        {es.menu.importReview}
+                      </Button>
+                    </Link>
+                  </>
                 )}
               </div>
 

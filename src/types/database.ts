@@ -13,6 +13,8 @@ export type InventoryTransactionType =
   | "slot_deactivation"
   | "slot_shipment";
 
+export type ImportReviewStatus = "PENDING_REVIEW" | "IN_REVIEW" | "RESOLVED" | "IGNORED";
+
 export interface Profile {
   id: string;
   name: string;
@@ -48,6 +50,37 @@ export interface OrderHistory {
   created_at: string;
 }
 
+export interface ImportReviewItem {
+  id: string;
+  entity_type: string;
+  entity_id: string | null;
+  source_file: string;
+  source_sheet: string | null;
+  source_row_number: number | null;
+  action_taken: string;
+  warning_code: string;
+  warning_message: string | null;
+  original_row_json: Record<string, unknown> | null;
+  suggested_fix: string | null;
+  review_status: ImportReviewStatus;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  resolution_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportAuditLog {
+  id: string;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  source_file: string;
+  source_row_number: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface Slot {
   id: string;
   warehouse_id: string;
@@ -66,6 +99,7 @@ export interface DonationItem {
   presentation: string | null;
   unit_of_measurement: string | null;
   status: DonationItemStatus;
+  needs_review: boolean;
   created_at: string;
   updated_at: string;
 }

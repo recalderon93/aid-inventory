@@ -11,6 +11,10 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
+    "import:inventory": "tsx scripts/import-excel-inventory.ts",
+    "import:clean": "tsx scripts/import-clean-inventory.ts",
+    "db:sql": "node scripts/run-sql.mjs",
+    "seed:prod-admins": "node scripts/seed-prod-admins.mjs --env .env.production.local",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -56,8 +60,10 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
+    "pg": "^8.22.0",
     "prettier": "^3.9.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.0",
     "typescript": "^5",
     "vitest": "^3.2.6"
   }

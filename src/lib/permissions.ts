@@ -4,6 +4,10 @@ export function canManageUsers(role: UserRole) {
   return role === "admin";
 }
 
+export function canManageImportReview(role: UserRole) {
+  return role === "admin";
+}
+
 export function canCreateSlots(role: UserRole) {
   return role === "admin" || role === "staff" || role === "collaborator";
 }

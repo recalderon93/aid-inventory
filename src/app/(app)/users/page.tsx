@@ -22,7 +22,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils";
 import type { Profile, UserStatus } from "@/types/database";
-import { Users, Plus, Download } from "lucide-react";
+import { Users, Plus, Download, ClipboardList } from "lucide-react";
 import { SectionHeader } from "@/components/section-header";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -106,6 +106,17 @@ export default function UsersPage() {
                 <p className="text-sm text-muted">{es.export.adminDescription}</p>
               </div>
               <Download className="h-5 w-5 shrink-0 text-muted" />
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href="/import-review">
+          <Card className="border-border bg-surface-1 transition-colors hover:bg-surface-2">
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-medium">{es.importReview.title}</p>
+                <p className="text-sm text-muted">{es.importReview.description}</p>
+              </div>
+              <ClipboardList className="h-5 w-5 shrink-0 text-muted" />
             </CardContent>
           </Card>
         </Link>

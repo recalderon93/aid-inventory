@@ -34,8 +34,19 @@ yarn-error.log*
 .env*
 !.env.example
 
-# private notes and secrets
+# private notes and secrets (local only)
 docs/private/
+private/
+
+# local inventory data — generate with npm run import:clean
+supabase/seed/*.csv
+supabase/seed/*.sql
+
+# sample workbooks (local only)
+docs/samples/
+
+# cursor
+.cursor/
 
 # vercel
 .vercel

@@ -4,6 +4,7 @@ import {
   canCreateSlots,
   canHandleOrders,
   canManageUsers,
+  canManageImportReview,
   canRegisterDonations,
   getOrderStatusVariant,
   inferCategory,
@@ -16,6 +17,12 @@ describe("permissions", () => {
       expect(canManageUsers("admin")).toBe(true);
       expect(canManageUsers("staff")).toBe(false);
       expect(canManageUsers("collaborator")).toBe(false);
+    });
+
+    it("only admin can manage import review", () => {
+      expect(canManageImportReview("admin")).toBe(true);
+      expect(canManageImportReview("staff")).toBe(false);
+      expect(canManageImportReview("collaborator")).toBe(false);
     });
 
     it("all roles can create slots and register donations", () => {
