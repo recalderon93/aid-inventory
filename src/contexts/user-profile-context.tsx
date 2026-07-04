@@ -12,9 +12,15 @@ interface UserProfileContextValue {
 
 const UserProfileContext = React.createContext<UserProfileContextValue | null>(null);
 
-export function UserProfileProvider({ children }: { children: React.ReactNode }) {
-  const [profile, setProfile] = React.useState<Profile | null>(null);
-  const [loading, setLoading] = React.useState(true);
+export function UserProfileProvider({
+  children,
+  initialProfile,
+}: {
+  children: React.ReactNode;
+  initialProfile: Profile | null;
+}) {
+  const [profile, setProfile] = React.useState<Profile | null>(initialProfile);
+  const [loading, setLoading] = React.useState(false);
 
   const refresh = React.useCallback(async () => {
     setLoading(true);

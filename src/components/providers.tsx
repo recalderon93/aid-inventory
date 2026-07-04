@@ -3,7 +3,6 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ToastProvider } from "@/components/ui/toast";
-import { UserProfileProvider } from "@/contexts/user-profile-context";
 
 type Theme = "light" | "dark" | "system";
 
@@ -90,9 +89,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ToastProvider>
-          <UserProfileProvider>{children}</UserProfileProvider>
-        </ToastProvider>
+        <ToastProvider>{children}</ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

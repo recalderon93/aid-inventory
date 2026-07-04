@@ -35,7 +35,8 @@
 
 1. Connect GitHub repo to Vercel.
 2. Set branch `master` → Production, `develop` → Preview.
-3. Environment variables:
+3. Enable **Deploy only if CI passes** (optional): in GitHub → Settings → Branches, require the `CI / quality` check on `master` and `develop`.
+4. Environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY` (server only)
@@ -65,6 +66,8 @@ Automatic on Vercel.
 Use second Supabase free project for staging, or Supabase branching on Pro plan.
 
 ## Checklist before go-live
+
+See **[production-readiness.md](production-readiness.md)** for the full v1 checklist. Summary:
 
 - [ ] All migrations applied to production DB
 - [ ] RLS policies tested per role

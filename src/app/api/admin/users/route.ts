@@ -46,26 +46,37 @@ export async function POST(request: Request) {
   };
 
   const admin = createAdminClient();
+  const name = `${first_name} ${last_name}`.trim();
   const { data: authData, error: authError } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: { name: `${first_name} ${last_name}`.trim() },
+    user_metadata: { name, role },
   });
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 400 });
 
-  const name = `${first_name} ${last_name}`.trim();
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: authData.user.id,
-    email,
-    name,
+  // Trigger creates the profile row; update fields the admin chose.
+  const baseUpdate = { name, role, status: "active" as UserStatus };
+  const extendedUpdate = {
+    ...baseUpdate,
     first_name,
     last_name,
     phone: phone ?? null,
-    role,
-    status: "active" as UserStatus,
-  });
+  };
+
+  let { error: profileError } = await admin
+    .from("profiles")
+    .update(extendedUpdate)
+    .eq("id", authData.user.id);
+
+  // Migration 00014 adds first_name/last_name/phone — fall back until it is applied.
+  if (profileError?.message?.includes("first_name")) {
+    ({ error: profileError } = await admin
+      .from("profiles")
+      .update(baseUpdate)
+      .eq("id", authData.user.id));
+  }
 
   if (profileError) {
     await admin.auth.admin.deleteUser(authData.user.id);
@@ -115,13 +126,21 @@ export async function PATCH(request: Request) {
   }
 
   if (first_name !== undefined || last_name !== undefined) {
-    const { data: existing } = await admin.from("profiles").select("first_name, last_name").eq("id", id).single();
-    const fn = first_name ?? existing?.first_name ?? "";
-    const ln = last_name ?? existing?.last_name ?? "";
-    updates.name = `${fn} ${ln}`.trim();
+    const { data: existing } = await admin.from("profiles").select("name").eq("id", id).single();
+    const fn = first_name ?? "";
+    const ln = last_name ?? "";
+    const combined = `${fn} ${ln}`.trim();
+    if (combined) updates.name = combined;
+    else if (existing?.name) updates.name = existing.name;
   }
 
-  const { error } = await admin.from("profiles").update(updates).eq("id", id);
+  let { error } = await admin.from("profiles").update(updates).eq("id", id);
+  if (error?.message?.includes("first_name")) {
+    delete updates.first_name;
+    delete updates.last_name;
+    delete updates.phone;
+    ({ error } = await admin.from("profiles").update(updates).eq("id", id));
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   await logAudit(action ?? "user_updated", "profile", id, user.id, updates);

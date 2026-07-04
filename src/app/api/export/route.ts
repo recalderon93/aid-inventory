@@ -1,24 +1,27 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
-
-interface ExportRow {
-  quantity: number;
-  slot: { number: string } | null;
-  donation_item: {
-    subcategory: string | null;
-    description: string;
-    presentation: string | null;
-    unit_of_measurement: string | null;
-  } | null;
-}
+import { getCurrentProfile } from "@/lib/auth-helpers";
+import { canManageUsers } from "@/lib/permissions";
+import {
+  INVENTORY_EXPORT_COLUMNS,
+  mapInventoryToExportRows,
+  type InventoryExportRow,
+} from "@/lib/export-inventory";
 
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const profile = await getCurrentProfile();
+  if (!profile || !canManageUsers(profile.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { data, error } = await supabase
@@ -35,17 +38,10 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = ((data ?? []) as unknown as ExportRow[]).map((row) => ({
-    "CAJA #": row.slot?.number ?? "",
-    CLASIFICACION: row.donation_item?.subcategory ?? "",
-    DESCRIPCION: row.donation_item?.description ?? "",
-    PRESENTACION: row.donation_item?.presentation ?? "",
-    CANT: row.quantity,
-    "UND MEDIDA": row.donation_item?.unit_of_measurement ?? "",
-  }));
+  const rows = mapInventoryToExportRows((data ?? []) as unknown as InventoryExportRow[]);
 
   const worksheet = XLSX.utils.json_to_sheet(rows, {
-    header: ["CAJA #", "CLASIFICACION", "DESCRIPCION", "PRESENTACION", "CANT", "UND MEDIDA"],
+    header: [...INVENTORY_EXPORT_COLUMNS],
   });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Inventario");

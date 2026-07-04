@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DonationItemPreview } from "@/components/donation-item-preview";
 import type { Slot, InventoryRow } from "@/types/database";
 import { formatDate } from "@/lib/utils";
 import { Package } from "lucide-react";
@@ -46,7 +47,7 @@ export function SlotDetail({ id }: { id: string }) {
           <h2 className="text-2xl font-bold">
             {es.slots.detail}: {slot.number}
           </h2>
-          <Badge className="mt-2">{es.slots.statuses[slot.status]}</Badge>
+          <Badge className="mt-2" variant="secondary">{es.slots.statuses[slot.status]}</Badge>
         </div>
         <Link href={`/inventory/add?slotId=${slot.id}`}>
           <Button>{es.slots.addDonation}</Button>
@@ -76,14 +77,15 @@ export function SlotDetail({ id }: { id: string }) {
                 href={`/inventory/${row.donation_item_id}`}
                 className="block rounded-lg border border-border p-3 transition-colors hover:bg-surface-2"
               >
-                <p className="font-medium">{row.donation_item?.description}</p>
-                <p className="text-sm text-muted">
-                  {row.donation_item?.subcategory} · {row.donation_item?.presentation}
-                </p>
-                <p className="mt-1 font-semibold">
-                  {es.inventory.quantity}: {row.quantity}{" "}
-                  {row.donation_item?.unit_of_measurement ?? ""}
-                </p>
+                <DonationItemPreview
+                  description={row.donation_item?.description ?? ""}
+                  presentation={row.donation_item?.presentation}
+                  unit_of_measurement={row.donation_item?.unit_of_measurement}
+                  subcategory={row.donation_item?.subcategory}
+                  category={row.donation_item?.category}
+                  status={row.donation_item?.status}
+                  quantity={row.quantity}
+                />
               </Link>
             ))
           )}

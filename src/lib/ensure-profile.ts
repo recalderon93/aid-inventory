@@ -1,25 +1,34 @@
 import type { User } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export async function ensureUserProfile(supabase: SupabaseClient, user: User) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) {
-    return { ok: false as const, error: new Error("No active session") };
-  }
+export type ProfileCheckFailure =
+  | "no_profile"
+  | "inactive"
+  | "query_error";
 
-  const { data: profile } = await supabase
+export async function ensureUserProfile(supabase: SupabaseClient, user: User) {
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("id, status")
     .eq("id", user.id)
     .maybeSingle();
 
+  if (error) {
+    console.error("Profile lookup failed:", error.message);
+    await supabase.auth.signOut();
+    return {
+      ok: false as const,
+      reason: "query_error" as const,
+      error,
+    };
+  }
+
   if (!profile) {
     await supabase.auth.signOut();
     return {
       ok: false as const,
-      error: new Error("Profile not found — contact administrator"),
+      reason: "no_profile" as const,
+      error: new Error("Profile not found"),
     };
   }
 
@@ -27,6 +36,7 @@ export async function ensureUserProfile(supabase: SupabaseClient, user: User) {
     await supabase.auth.signOut();
     return {
       ok: false as const,
+      reason: "inactive" as const,
       error: new Error("Account is not active"),
     };
   }

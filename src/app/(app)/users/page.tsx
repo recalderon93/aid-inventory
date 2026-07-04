@@ -22,7 +22,9 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils";
 import type { Profile, UserStatus } from "@/types/database";
-import { Users, Plus } from "lucide-react";
+import { Users, Plus, Download } from "lucide-react";
+import { SectionHeader } from "@/components/section-header";
+import { Card, CardContent } from "@/components/ui/card";
 
 export default function UsersPage() {
   const router = useRouter();
@@ -93,6 +95,23 @@ export default function UsersPage() {
           </Button>
         }
       />
+
+      <section className="space-y-3">
+        <SectionHeader title={es.users.dataSection} />
+        <Link href="/users/export">
+          <Card className="border-border bg-surface-1 transition-colors hover:bg-surface-2">
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div>
+                <p className="font-medium">{es.export.title}</p>
+                <p className="text-sm text-muted">{es.export.adminDescription}</p>
+              </div>
+              <Download className="h-5 w-5 shrink-0 text-muted" />
+            </CardContent>
+          </Card>
+        </Link>
+      </section>
+
+      <SectionHeader title={es.users.usersSection} />
 
       {users.length === 0 ? (
         <EmptyState

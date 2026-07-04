@@ -1,0 +1,5 @@
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "0.1.0";
+
+export function formatAppVersion(version = APP_VERSION) {
+  return `v${version}`;
+}

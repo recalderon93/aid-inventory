@@ -9,16 +9,18 @@ import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { DonationItemPreview } from "@/components/donation-item-preview";
 import { Package, Plus } from "lucide-react";
+import type { DonationItemStatus } from "@/types/database";
 
 interface InventoryListItem {
   donation_item_id: string;
   description: string;
+  category: string;
   subcategory: string | null;
   presentation: string | null;
   unit_of_measurement: string | null;
-  status: string;
+  status: DonationItemStatus;
   total_quantity: number;
 }
 
@@ -34,7 +36,7 @@ export default function InventoryPage() {
       const { data: inventory } = await supabase
         .from("inventory")
         .select(
-          "quantity, donation_item:donation_items(id, description, subcategory, presentation, unit_of_measurement, status)"
+          "quantity, donation_item:donation_items(id, description, category, subcategory, presentation, unit_of_measurement, status)"
         )
         .gt("quantity", 0);
 
@@ -49,6 +51,7 @@ export default function InventoryPage() {
           map.set(item.id, {
             donation_item_id: item.id,
             description: item.description,
+            category: item.category,
             subcategory: item.subcategory,
             presentation: item.presentation,
             unit_of_measurement: item.unit_of_measurement,
@@ -143,23 +146,15 @@ export default function InventoryPage() {
               href={`/inventory/${item.donation_item_id}`}
               className="block rounded-xl border border-border bg-surface-1 p-4 transition-colors hover:bg-surface-2 motion-safe:animate-in"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium">{item.description}</p>
-                  <p className="text-sm text-muted">
-                    {item.subcategory} · {item.presentation}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold">{item.total_quantity}</p>
-                  <p className="text-xs text-muted">{item.unit_of_measurement}</p>
-                </div>
-              </div>
-              {item.status === "needed" && (
-                <Badge variant="warning" className="mt-2">
-                  {es.inventory.needed}
-                </Badge>
-              )}
+              <DonationItemPreview
+                description={item.description}
+                presentation={item.presentation}
+                unit_of_measurement={item.unit_of_measurement}
+                subcategory={item.subcategory}
+                category={item.category}
+                status={item.status}
+                quantity={item.total_quantity}
+              />
             </Link>
           ))}
         </div>

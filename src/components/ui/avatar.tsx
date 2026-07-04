@@ -29,16 +29,20 @@ export function Avatar({ initials, size = "md", className, ...props }: AvatarPro
 export function getInitials(
   firstName?: string | null,
   lastName?: string | null,
-  fallbackName?: string | null
+  fallbackName?: string | null,
+  role?: string | null
 ): string {
   const first = firstName?.trim();
   const last = lastName?.trim();
   if (first && last) return `${first[0]}${last[0]}`;
   if (first) return first.slice(0, 2);
+  if (last) return last.slice(0, 2);
   if (fallbackName) {
     const parts = fallbackName.trim().split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`;
-    return fallbackName.slice(0, 2);
+    const trimmed = fallbackName.trim();
+    if (trimmed) return trimmed.slice(0, 2);
   }
+  if (role) return role.slice(0, 2).toUpperCase();
   return "?";
 }

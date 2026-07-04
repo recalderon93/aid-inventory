@@ -10,11 +10,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DonationItemPreview } from "@/components/donation-item-preview";
 import { VENEZUELAN_STATES, type DonationItem } from "@/types/database";
 
 interface OrderLine {
   donation_item_id: string;
   description: string;
+  presentation: string | null;
+  unit_of_measurement: string | null;
+  subcategory: string | null;
+  category: string;
+  status: DonationItem["status"];
   requested_quantity: number;
   available: number;
 }
@@ -75,6 +81,11 @@ export default function NewOrderPage() {
     setLines([...lines, {
       donation_item_id: item.id,
       description: item.description,
+      presentation: item.presentation,
+      unit_of_measurement: item.unit_of_measurement,
+      subcategory: item.subcategory,
+      category: item.category,
+      status: item.status,
       requested_quantity: 1,
       available,
     }]);
@@ -181,18 +192,35 @@ export default function NewOrderPage() {
           <button
             key={item.id}
             type="button"
-            className="block w-full rounded-lg border p-3 text-left hover:bg-neutral-50"
+            className="block w-full rounded-lg border border-border bg-surface-1 p-3 text-left transition-colors hover:bg-surface-2"
             onClick={() => addLine(item)}
           >
-            {item.description} — {item.subcategory}
+            <DonationItemPreview
+              description={item.description}
+              presentation={item.presentation}
+              unit_of_measurement={item.unit_of_measurement}
+              subcategory={item.subcategory}
+              category={item.category}
+              status={item.status}
+              showQuantity={false}
+            />
           </button>
         ))}
         <div className="space-y-2">
           {lines.map((line, i) => (
-            <div key={line.donation_item_id} className="flex items-center gap-2 rounded-lg border p-3">
-              <div className="flex-1">
-                <p className="font-medium">{line.description}</p>
-                <p className="text-sm text-neutral-500">
+            <div key={line.donation_item_id} className="flex items-center gap-2 rounded-lg border border-border bg-surface-1 p-3">
+              <div className="min-w-0 flex-1">
+                <DonationItemPreview
+                  description={line.description}
+                  presentation={line.presentation}
+                  unit_of_measurement={line.unit_of_measurement}
+                  subcategory={line.subcategory}
+                  category={line.category}
+                  status={line.status}
+                  quantity={line.available}
+                  showQuantity={false}
+                />
+                <p className="mt-1 text-xs text-muted">
                   {es.orders.available}: {line.available}
                 </p>
               </div>
@@ -226,9 +254,20 @@ export default function NewOrderPage() {
           <p><strong>{es.orders.phone}:</strong> {requester.requester_phone}</p>
           <p><strong>{es.orders.state}:</strong> {requester.requester_state}</p>
           {lines.map((line) => (
-            <p key={line.donation_item_id}>
-              {line.description}: {line.requested_quantity} ({es.orders.available}: {line.available})
-            </p>
+            <div key={line.donation_item_id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+              <DonationItemPreview
+                description={line.description}
+                presentation={line.presentation}
+                unit_of_measurement={line.unit_of_measurement}
+                subcategory={line.subcategory}
+                category={line.category}
+                status={line.status}
+                quantity={line.available}
+              />
+              <p className="mt-1 text-xs text-muted">
+                {es.orders.requested}: {line.requested_quantity}
+              </p>
+            </div>
           ))}
           <Button onClick={handleSubmit} disabled={saving}>
             {saving ? es.app.loading : es.orders.submit}

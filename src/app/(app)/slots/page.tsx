@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { filterSlots, hasExactSlotMatch } from "@/lib/slot-search";
+import { createSlot } from "@/lib/slot-create";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { canCreateSlots } from "@/lib/permissions";
 import { es } from "@/locales/es";
@@ -12,13 +13,13 @@ import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
+import { SlotCardLink } from "@/components/slot-card";
 import type { Slot } from "@/types/database";
 import { Boxes } from "lucide-react";
 
 export default function SlotsPage() {
+  const router = useRouter();
   const { profile } = useUserProfile();
   const { showToast } = useToast();
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -46,22 +47,24 @@ export default function SlotsPage() {
     if (!n) return;
     setCreating(true);
     const supabase = createClient();
-    await supabase.from("slots").insert({
-      number: n,
-      name: n,
-      status: "active",
-    });
+    const { slot, error } = await createSlot(supabase, n);
     setCreating(false);
+
+    if (error || !slot) {
+      showToast(es.app.error, "error");
+      return;
+    }
+
     showToast(es.slots.created_success);
-    await loadSlots();
+    router.push(`/slots/${slot.id}`);
   }
 
   const filtered = filterSlots(slots, search);
+  const canCreate = profile ? canCreateSlots(profile.role) : false;
   const showCreateBanner =
-    search.trim() &&
-    !hasExactSlotMatch(slots, search) &&
-    profile &&
-    canCreateSlots(profile.role);
+    search.trim() && !hasExactSlotMatch(slots, search) && canCreate;
+
+  const createButtonLabel = es.slots.createFromSearch.replace("{number}", search.trim());
 
   return (
     <div className="space-y-4">
@@ -75,8 +78,8 @@ export default function SlotsPage() {
       <p className="text-xs text-muted">{es.slots.searchHint}</p>
 
       {showCreateBanner && (
-        <Button variant="outline" className="w-full" onClick={() => handleCreate()} disabled={creating}>
-          {es.slots.createFromSearch.replace("{number}", search.trim())}
+        <Button className="w-full" onClick={() => handleCreate()} disabled={creating}>
+          {createButtonLabel}
         </Button>
       )}
 
@@ -85,10 +88,14 @@ export default function SlotsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={Boxes}
-          title={es.slots.empty}
-          description={es.slots.emptyDescription}
+          title={search.trim() ? es.app.noResults : es.slots.empty}
+          description={search.trim() ? es.slots.searchHint : es.slots.emptyDescription}
           action={
-            profile && canCreateSlots(profile.role) ? (
+            showCreateBanner ? (
+              <Button size="sm" onClick={() => handleCreate()} disabled={creating}>
+                {createButtonLabel}
+              </Button>
+            ) : canCreate && !search.trim() ? (
               <Button size="sm" onClick={() => handleCreate("1")} disabled={creating}>
                 {es.slots.create}
               </Button>
@@ -96,17 +103,22 @@ export default function SlotsPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {filtered.map((slot) => (
-            <Link key={slot.id} href={`/slots/${slot.id}`}>
-              <Card className="border-border bg-surface-1 transition hover:border-foreground motion-safe:animate-in">
-                <CardContent className="flex flex-col items-center gap-2 p-4">
-                  <span className="text-2xl font-bold">{slot.number}</span>
-                  <Badge variant="secondary">{es.slots.statuses[slot.status]}</Badge>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {filtered.map((slot) => (
+              <SlotCardLink
+                key={slot.id}
+                href={`/slots/${slot.id}`}
+                number={slot.number}
+                status={slot.status}
+              />
+            ))}
+          </div>
+          {showCreateBanner && (
+            <Button className="w-full" variant="secondary" onClick={() => handleCreate()} disabled={creating}>
+              {createButtonLabel}
+            </Button>
+          )}
         </div>
       )}
     </div>

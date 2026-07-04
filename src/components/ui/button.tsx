@@ -4,15 +4,15 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-11 px-4 active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-colors transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 min-h-11 px-4 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-900",
-        secondary: "bg-neutral-100 text-neutral-900 hover:bg-neutral-200 dark:bg-neutral-800 dark:text-white",
-        outline: "border border-neutral-300 bg-transparent hover:bg-neutral-100 dark:border-neutral-700",
-        ghost: "hover:bg-neutral-100 dark:hover:bg-neutral-800",
-        destructive: "bg-red-600 text-white hover:bg-red-700",
+        default: "bg-foreground text-background hover:opacity-90",
+        secondary: "bg-surface-2 text-foreground hover:bg-border/60",
+        outline: "border border-border bg-transparent hover:bg-surface-2 hover:border-foreground/40",
+        ghost: "hover:bg-surface-2",
+        destructive: "bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-500",
       },
       size: {
         default: "h-11 px-4 py-2",

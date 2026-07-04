@@ -5,13 +5,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useUserProfile } from "@/contexts/user-profile-context";
-import { useTheme } from "@/components/providers";
 import { canManageUsers } from "@/lib/permissions";
+import { ThemeSection } from "@/components/theme-section";
 import { es } from "@/locales/es";
+import { formatAppVersion } from "@/lib/version";
 import { Avatar, getInitials } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -21,8 +24,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
-import { LogOut, Users, Sun, Moon, Monitor } from "lucide-react";
+import { ChevronRight, LogOut, Pencil, Users } from "lucide-react";
 
 type MenuView = "main" | "password";
 
@@ -34,7 +36,6 @@ interface UserMenuSheetProps {
 export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
   const router = useRouter();
   const { profile } = useUserProfile();
-  const { theme, setTheme } = useTheme();
   const { showToast } = useToast();
   const [view, setView] = useState<MenuView>("main");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -45,7 +46,12 @@ export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
 
   if (!profile) return null;
 
-  const initials = getInitials(profile.first_name, profile.last_name, profile.name);
+  const initials = getInitials(
+    profile.first_name,
+    profile.last_name,
+    profile.name,
+    profile.role
+  );
   const displayName =
     [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.name;
 
@@ -104,52 +110,67 @@ export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
     setLoading(false);
   }
 
-  const themeOptions = [
-    { value: "light" as const, label: es.menu.themeLight, icon: Sun },
-    { value: "dark" as const, label: es.menu.themeDark, icon: Moon },
-    { value: "system" as const, label: es.menu.themeSystem, icon: Monitor },
-  ];
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent>
         <SheetHeader>
           <div className="flex items-center gap-3">
             <Avatar initials={initials} size="lg" />
-            <div>
-              <SheetTitle>{displayName}</SheetTitle>
-              <p className="text-sm text-muted">{profile.email}</p>
+            <div className="min-w-0">
+              <SheetTitle className="truncate">{displayName}</SheetTitle>
+              <p className="truncate text-sm text-muted">{profile.email}</p>
+              <Badge variant="secondary" className="mt-1.5">
+                {es.users.roles[profile.role]}
+              </Badge>
             </div>
           </div>
         </SheetHeader>
 
         <SheetBody>
           {view === "main" ? (
-            <div className="space-y-6">
-              <div className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
+            <div className="space-y-5">
+              <section className="space-y-3">
                 <h3 className="text-sm font-medium">{es.menu.profile}</h3>
-                <dl className="space-y-2 text-sm">
+                <dl className="space-y-2.5 text-sm">
                   <div className="flex justify-between gap-4">
                     <dt className="text-muted">{es.menu.firstName}</dt>
-                    <dd>{profile.first_name || "—"}</dd>
+                    <dd className="text-right">{profile.first_name || "—"}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-muted">{es.menu.lastName}</dt>
-                    <dd>{profile.last_name || "—"}</dd>
+                    <dd className="text-right">{profile.last_name || "—"}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
                     <dt className="text-muted">{es.auth.email}</dt>
-                    <dd className="truncate">{profile.email}</dd>
+                    <dd className="truncate text-right">{profile.email}</dd>
                   </div>
                   <div className="flex justify-between gap-4">
-                    <dt className="text-muted">{es.menu.phone}</dt>
-                    <dd>{profile.phone || "—"}</dd>
+                    <dt className="text-muted">{es.menu.role}</dt>
+                    <dd>{es.users.roles[profile.role]}</dd>
                   </div>
                 </dl>
-              </div>
+              </section>
+
+              <Separator />
+
+              <Link href="/profile" onClick={() => onOpenChange(false)}>
+                <Button variant="outline" className="w-full justify-between">
+                  <span className="flex items-center gap-2">
+                    <Pencil className="h-4 w-4" />
+                    {es.menu.editProfile}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted" />
+                </Button>
+              </Link>
+
+              <Separator />
 
               <div className="space-y-2">
-                <Button variant="outline" className="w-full justify-start" onClick={() => setView("password")}>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => setView("password")}
+                >
                   {es.menu.changePassword}
                 </Button>
                 {canManageUsers(profile.role) && (
@@ -162,27 +183,13 @@ export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label>{es.menu.theme}</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {themeOptions.map(({ value, label, icon: Icon }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setTheme(value)}
-                      className={cn(
-                        "flex flex-col items-center gap-1 rounded-lg border p-2 text-xs transition-colors",
-                        theme === value
-                          ? "border-foreground bg-surface-2"
-                          : "border-border hover:bg-surface-2"
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <Separator />
+
+              <ThemeSection />
+
+              <p className="pt-2 text-center text-xs text-muted">
+                {es.menu.version} {formatAppVersion()}
+              </p>
             </div>
           ) : (
             <form onSubmit={handlePasswordChange} className="space-y-4">
@@ -224,6 +231,7 @@ export function UserMenuSheet({ open, onOpenChange }: UserMenuSheetProps) {
 
         {view === "main" && (
           <SheetFooter>
+            <Separator className="mb-4" />
             <Button variant="destructive" className="w-full" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />
               {es.auth.logout}

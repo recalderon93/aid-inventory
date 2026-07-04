@@ -10,14 +10,13 @@ import { Logo } from "@/components/logo";
 import { Avatar, getInitials } from "@/components/ui/avatar";
 import { UserMenuSheet } from "@/components/user-menu-sheet";
 import { cn } from "@/lib/utils";
-import { Package, Boxes, ClipboardList, ArrowLeftRight, Download, Plus } from "lucide-react";
+import { Package, Boxes, ClipboardList, ArrowLeftRight, Plus } from "lucide-react";
 
 const sideNavItems = [
   { href: "/slots", label: es.nav.slots, icon: Boxes },
   { href: "/inventory", label: es.nav.inventory, icon: Package },
   { href: "/orders", label: es.nav.orders, icon: ClipboardList },
   { href: "/transactions", label: es.nav.transactions, icon: ArrowLeftRight },
-  { href: "/export", label: es.nav.export, icon: Download },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -26,12 +25,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const initials = profile
-    ? getInitials(profile.first_name, profile.last_name, profile.name)
+    ? getInitials(profile.first_name, profile.last_name, profile.name, profile.role)
     : "?";
 
   const leftItems = sideNavItems.slice(0, 2);
   const rightItems = sideNavItems.slice(2);
   const showDonateFab = profile && canRegisterDonations(profile.role);
+  const isDonationFlow = pathname.startsWith("/inventory/add");
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-0">
@@ -49,8 +49,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl flex-1 p-4 pb-28">{children}</main>
+      <main className={cn("mx-auto w-full max-w-3xl flex-1 p-4", isDonationFlow ? "pb-4" : "pb-28")}>
+        {children}
+      </main>
 
+      {!isDonationFlow && (
       <nav className="fixed bottom-0 left-0 right-0 border-t border-border bg-surface-1/95 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-end justify-around px-2 pb-2 pt-1">
           {leftItems.map(({ href, label, icon: Icon }) => {
@@ -60,8 +63,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-xs transition-colors",
-                  active ? "text-foreground" : "text-muted"
+                  "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-xs transition-colors",
+                  active
+                    ? "bg-surface-2 font-medium text-foreground"
+                    : "text-muted hover:bg-surface-2/60 hover:text-foreground"
                 )}
               >
                 {active && (
@@ -79,7 +84,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="relative -mt-5 flex flex-col items-center"
               aria-label={es.nav.donate}
             >
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg transition-transform active:scale-95">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-foreground text-background shadow-lg ring-4 ring-surface-1 transition-all hover:opacity-90 active:scale-95">
                 <Plus className="h-7 w-7" strokeWidth={2.5} />
               </span>
               <span className="mt-1 text-xs font-medium text-foreground">{es.nav.donate}</span>
@@ -93,8 +98,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-xs transition-colors",
-                  active ? "text-foreground" : "text-muted"
+                  "relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-xs transition-colors",
+                  active
+                    ? "bg-surface-2 font-medium text-foreground"
+                    : "text-muted hover:bg-surface-2/60 hover:text-foreground"
                 )}
               >
                 {active && (
@@ -107,6 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </div>
       </nav>
+      )}
 
       <UserMenuSheet open={menuOpen} onOpenChange={setMenuOpen} />
     </div>

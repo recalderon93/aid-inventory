@@ -5,7 +5,7 @@ export function canManageUsers(role: UserRole) {
 }
 
 export function canCreateSlots(role: UserRole) {
-  return role === "admin" || role === "staff";
+  return role === "admin" || role === "staff" || role === "collaborator";
 }
 
 export function canManageInventory(role: UserRole) {

@@ -5,25 +5,161 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/ensure-profile";
 import { inferCategory, canCreateSlots } from "@/lib/permissions";
+import { buildDonationTaxonomy, mergeTaxonomyEntry, type DonationTaxonomy } from "@/lib/donation-taxonomy";
 import { filterSlots, hasExactSlotMatch } from "@/lib/slot-search";
+import { createSlot } from "@/lib/slot-create";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { es } from "@/locales/es";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { cn, capitalizeWords, normalizeText } from "@/lib/utils";
+import { DonationItemPreview } from "@/components/donation-item-preview";
+import { StepProgress } from "@/components/step-progress";
+import { SlotCardButton } from "@/components/slot-card";
+import { Badge } from "@/components/ui/badge";
 import type { Slot, DonationItem } from "@/types/database";
+import { Pencil, Trash2, X } from "lucide-react";
 
-interface PendingItem {
+const selectClassName =
+  "h-11 w-full rounded-lg border border-border bg-surface-1 px-3 text-sm capitalize";
+
+interface DonationFormState {
+  category: string;
   subcategory: string;
   description: string;
   presentation: string;
   quantity: number;
   unit_of_measurement: string;
   notes: string;
+}
+
+const emptyForm = (): DonationFormState => ({
+  category: "",
+  subcategory: "",
+  description: "",
+  presentation: "",
+  quantity: 1,
+  unit_of_measurement: "",
+  notes: "",
+});
+
+function matchesExistingItem(item: DonationItem, form: DonationFormState) {
+  return (
+    normalizeText(form.category) === normalizeText(item.category) &&
+    normalizeText(form.description) === normalizeText(item.description) &&
+    normalizeText(form.presentation) === normalizeText(item.presentation ?? "") &&
+    normalizeText(form.subcategory) === normalizeText(item.subcategory ?? "") &&
+    normalizeText(form.unit_of_measurement) === normalizeText(item.unit_of_measurement ?? "")
+  );
+}
+
+const SUBCATEGORY_OPTION_SEP = "||";
+function subcategoryOptionValue(category: string, subcategory: string) {
+  return `${category}${SUBCATEGORY_OPTION_SEP}${subcategory}`;
+}
+function parseSubcategoryOptionValue(value: string) {
+  const [category, subcategory] = value.split(SUBCATEGORY_OPTION_SEP);
+  return { category, subcategory };
+}
+
+function SlotBadge({ number }: { number: string }) {
+  return (
+    <div className="rounded-xl border-2 border-foreground/80 bg-surface-2 px-4 py-3 text-center">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+        {es.slots.selectedSlot}
+      </p>
+      <p className="text-2xl font-bold tracking-tight">
+        {es.slots.slotLabel.replace("{number}", number)}
+      </p>
+    </div>
+  );
+}
+
+function SlotHeader({ number, onChangeSlot }: { number: string; onChangeSlot: () => void }) {
+  return (
+    <div className="space-y-2">
+      <SlotBadge number={number} />
+      <Button type="button" variant="ghost" size="sm" className="w-full text-muted" onClick={onChangeSlot}>
+        {es.inventory.changeSlot}
+      </Button>
+    </div>
+  );
+}
+
+interface PendingItem {
+  id: string;
+  subcategory: string | null;
+  category: string;
+  description: string;
+  presentation: string;
+  quantity: number;
+  unit_of_measurement: string;
+  notes: string;
   existingItemId?: string;
+}
+
+function PendingItemRow({
+  item,
+  onEdit,
+  onRemove,
+  compact = false,
+}: {
+  item: PendingItem;
+  onEdit: () => void;
+  onRemove: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-2",
+        !compact && "border-b border-border pb-3 last:border-0 last:pb-0"
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <DonationItemPreview
+          description={item.description}
+          presentation={item.presentation}
+          unit_of_measurement={item.unit_of_measurement}
+          subcategory={item.subcategory}
+          category={item.category}
+          quantity={item.quantity}
+        />
+      </div>
+      <div className="flex shrink-0 gap-0.5">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onEdit}
+          aria-label={es.inventory.editItem}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-red-600 hover:text-red-700"
+          onClick={onRemove}
+          aria-label={es.inventory.removeItem}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: string | null }) {
@@ -39,17 +175,15 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
   const [itemSearch, setItemSearch] = useState("");
   const [existingItems, setExistingItems] = useState<DonationItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<DonationItem | null>(null);
-  const [form, setForm] = useState({
-    subcategory: "",
-    description: "",
-    presentation: "",
-    quantity: 1,
-    unit_of_measurement: "",
-    notes: "",
+  const [taxonomy, setTaxonomy] = useState<DonationTaxonomy>({
+    categories: [],
+    subcategoriesByCategory: {},
   });
+  const [form, setForm] = useState<DonationFormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [creatingSlot, setCreatingSlot] = useState(false);
   const [error, setError] = useState("");
+  const [exitDialogOpen, setExitDialogOpen] = useState(false);
 
   useEffect(() => {
     async function loadSlots() {
@@ -67,6 +201,69 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
     }
     loadSlots();
   }, [preselectedSlotId]);
+
+  useEffect(() => {
+    async function loadTaxonomy() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("donation_items")
+        .select("category, subcategory")
+        .is("deleted_at", null);
+      setTaxonomy(buildDonationTaxonomy(data ?? []));
+    }
+    loadTaxonomy();
+  }, []);
+
+  const subcategoryOptions = form.category
+    ? (taxonomy.subcategoriesByCategory[form.category] ?? [])
+    : [];
+
+  const selectedSubcategoryKey =
+    form.category &&
+    form.subcategory &&
+    subcategoryOptions.includes(form.subcategory)
+      ? subcategoryOptionValue(form.category, form.subcategory)
+      : "";
+
+  function updateForm(patch: Partial<DonationFormState>) {
+    setForm((prev) => ({ ...prev, ...patch }));
+  }
+
+  function handleTextBlur(field: "category" | "subcategory" | "description" | "presentation" | "unit_of_measurement") {
+    updateForm({ [field]: capitalizeWords(form[field]) });
+  }
+
+  function handleCategoryChange(category: string) {
+    const subcategories = taxonomy.subcategoriesByCategory[category] ?? [];
+    updateForm({
+      category,
+      subcategory: subcategories.includes(form.subcategory) ? form.subcategory : "",
+    });
+  }
+
+  function handleSubcategorySelect(value: string) {
+    if (!value) return;
+    if (value.includes(SUBCATEGORY_OPTION_SEP)) {
+      const { category, subcategory } = parseSubcategoryOptionValue(value);
+      updateForm({ category, subcategory });
+      return;
+    }
+    updateForm({ subcategory: value });
+  }
+
+  function fillFormFromItem(item: DonationItem) {
+    setSelectedItem(item);
+    setForm({
+      category: item.category,
+      subcategory: item.subcategory ?? "",
+      description: item.description,
+      presentation: item.presentation ?? "",
+      quantity: 1,
+      unit_of_measurement: item.unit_of_measurement ?? "",
+      notes: "",
+    });
+    setItemSearch(item.description);
+  }
 
   useEffect(() => {
     if (itemSearch.length < 2) {
@@ -87,68 +284,180 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
   }, [itemSearch]);
 
   const filteredSlots = filterSlots(slots, slotSearch);
+  const canCreate = profile ? canCreateSlots(profile.role) : false;
   const showCreateSlot =
-    slotSearch.trim() &&
-    !hasExactSlotMatch(slots, slotSearch) &&
-    profile &&
-    canCreateSlots(profile.role);
+    slotSearch.trim() && !hasExactSlotMatch(slots, slotSearch) && canCreate;
+
+  const isExistingMatch = selectedItem ? matchesExistingItem(selectedItem, form) : false;
 
   async function handleCreateSlot() {
     const number = slotSearch.trim();
     if (!number) return;
     setCreatingSlot(true);
     const supabase = createClient();
-    const { data, error: createError } = await supabase
-      .from("slots")
-      .insert({ number, name: number, status: "active" })
-      .select()
-      .single();
+    const { slot, error: createError } = await createSlot(supabase, number);
     setCreatingSlot(false);
-    if (createError || !data) return;
-    setSlots((prev) => [...prev, data]);
-    setSelectedSlot(data);
+    if (createError || !slot) return;
+    setSlots((prev) => [...prev, slot]);
+    setSelectedSlot(slot);
     setStep(2);
     showToast(es.slots.created_success);
   }
 
-  function handleAddItem() {
-    if (!selectedSlot) return;
-    const item: PendingItem = selectedItem
-      ? {
-          subcategory: selectedItem.subcategory ?? "",
-          description: selectedItem.description,
-          presentation: selectedItem.presentation ?? "",
-          quantity: form.quantity,
-          unit_of_measurement: selectedItem.unit_of_measurement ?? "",
-          notes: form.notes,
-          existingItemId: selectedItem.id,
-        }
-      : {
-          subcategory: form.subcategory.trim(),
-          description: form.description.trim(),
-          presentation: form.presentation.trim(),
-          quantity: form.quantity,
-          unit_of_measurement: form.unit_of_measurement.trim(),
-          notes: form.notes,
-        };
+  function resetItemForm() {
+    setSelectedItem(null);
+    setItemSearch("");
+    setForm(emptyForm());
+    setError("");
+  }
 
-    if (!item.description && !item.existingItemId) {
+  function buildPendingItemFromForm():
+    | { ok: true; item: PendingItem }
+    | { ok: false; error: string } {
+    if (!selectedSlot) {
+      return { ok: false, error: es.app.error };
+    }
+
+    const normalized = {
+      category: form.category.trim() || inferCategory(form.subcategory),
+      subcategory: form.subcategory.trim() || null,
+      description: form.description.trim(),
+      presentation: form.presentation.trim(),
+      quantity: form.quantity,
+      unit_of_measurement: form.unit_of_measurement.trim(),
+      notes: form.notes,
+    };
+
+    if (!normalized.category) {
+      return { ok: false, error: es.inventory.categoryRequired };
+    }
+
+    if (!normalized.description) {
+      return { ok: false, error: es.app.error };
+    }
+
+    const useExisting =
+      selectedItem &&
+      matchesExistingItem(selectedItem, {
+        ...form,
+        ...normalized,
+        subcategory: normalized.subcategory ?? "",
+      });
+
+    return {
+      ok: true,
+      item: {
+        id: crypto.randomUUID(),
+        subcategory: normalized.subcategory,
+        category: normalized.category,
+        description: normalized.description,
+        presentation: normalized.presentation,
+        quantity: normalized.quantity,
+        unit_of_measurement: normalized.unit_of_measurement,
+        notes: normalized.notes,
+        existingItemId: useExisting ? selectedItem.id : undefined,
+      },
+    };
+  }
+
+  function formHasItemDraft() {
+    return Boolean(
+      form.category.trim() ||
+        form.subcategory.trim() ||
+        form.description.trim() ||
+        form.presentation.trim() ||
+        form.unit_of_measurement.trim()
+    );
+  }
+
+  function handleAddItem() {
+    const result = buildPendingItemFromForm();
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    setPendingItems((prev) => [...prev, result.item]);
+    setTaxonomy((prev) => mergeTaxonomyEntry(prev, result.item.category, result.item.subcategory));
+    resetItemForm();
+  }
+
+  function handleGoToReview() {
+    if (formHasItemDraft()) {
+      const result = buildPendingItemFromForm();
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setPendingItems((prev) => [...prev, result.item]);
+      setTaxonomy((prev) => mergeTaxonomyEntry(prev, result.item.category, result.item.subcategory));
+      resetItemForm();
+      setStep(3);
+      return;
+    }
+
+    if (pendingItems.length === 0) {
       setError(es.app.error);
       return;
     }
 
-    setPendingItems((prev) => [...prev, item]);
-    setSelectedItem(null);
-    setItemSearch("");
-    setForm({
-      subcategory: "",
-      description: "",
-      presentation: "",
-      quantity: 1,
-      unit_of_measurement: "",
-      notes: "",
-    });
     setError("");
+    setStep(3);
+  }
+
+  const canAddFromForm = form.category.trim() !== "" && form.description.trim() !== "";
+  const canReview = canAddFromForm || pendingItems.length > 0;
+
+  const hasUnsavedProgress =
+    pendingItems.length > 0 || formHasItemDraft() || step > 1;
+
+  function exitDonation() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/inventory");
+    }
+  }
+
+  function handleCloseFlow() {
+    if (hasUnsavedProgress) {
+      setExitDialogOpen(true);
+      return;
+    }
+    exitDonation();
+  }
+
+  function handleChangeSlot() {
+    setStep(1);
+  }
+
+  function handleEditPending(id: string) {
+    const item = pendingItems.find((p) => p.id === id);
+    if (!item) return;
+
+    setForm({
+      category: item.category,
+      subcategory: item.subcategory ?? "",
+      description: item.description,
+      presentation: item.presentation,
+      quantity: item.quantity,
+      unit_of_measurement: item.unit_of_measurement,
+      notes: item.notes,
+    });
+    setItemSearch(item.description);
+    setSelectedItem(null);
+    setPendingItems((prev) => prev.filter((p) => p.id !== id));
+    setError("");
+    setStep(2);
+  }
+
+  function handleRemovePending(id: string) {
+    const next = pendingItems.filter((p) => p.id !== id);
+    setPendingItems(next);
+    if (next.length === 0 && step === 3) {
+      setStep(2);
+    }
   }
 
   async function handleFinish() {
@@ -180,7 +489,7 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
         const { data: newItem, error: itemError } = await supabase
           .from("donation_items")
           .insert({
-            category: inferCategory(item.subcategory),
+            category: item.category,
             subcategory: item.subcategory,
             description: item.description,
             presentation: item.presentation || null,
@@ -239,30 +548,67 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
   }
 
   const steps = [
-    { n: 1, label: es.inventory.stepSlot },
-    { n: 2, label: es.inventory.stepItems },
-    { n: 3, label: es.inventory.stepReview },
+    { label: es.inventory.stepSlot },
+    { label: es.inventory.stepItems },
+    { label: es.inventory.stepReview },
   ];
+
+  const totalQuantity = pendingItems.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        {steps.map((s) => (
-          <div
-            key={s.n}
-            className={cn(
-              "flex-1 rounded-lg border px-2 py-2 text-center text-xs",
-              step === s.n ? "border-foreground bg-surface-2 font-medium" : "border-border text-muted"
-            )}
-          >
-            {s.label}
-          </div>
-        ))}
+      <div className="flex items-start gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="mt-0.5 shrink-0"
+          onClick={handleCloseFlow}
+          aria-label={es.inventory.closeDonation}
+        >
+          <X className="h-5 w-5" />
+        </Button>
+        <div className="min-w-0 flex-1">
+          <StepProgress
+            steps={steps}
+            currentStep={step}
+            stepLabel={es.inventory.stepOf
+              .replace("{current}", String(step))
+              .replace("{total}", String(steps.length))}
+          />
+        </div>
       </div>
+
+      <Dialog open={exitDialogOpen} onOpenChange={setExitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{es.inventory.exitDonationTitle}</DialogTitle>
+            <DialogDescription>{es.inventory.exitDonationDescription}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setExitDialogOpen(false)}>
+              {es.app.cancel}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setExitDialogOpen(false);
+                exitDonation();
+              }}
+            >
+              {es.inventory.exitDonationConfirm}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {step === 1 && (
         <div className="space-y-4">
           <h2 className="text-2xl font-bold">{es.inventory.selectSlot}</h2>
+          {pendingItems.length > 0 && (
+            <p className="text-sm text-muted">{es.inventory.changeSlotHint}</p>
+          )}
           <p className="text-sm text-muted">{es.slots.searchHint}</p>
           <Input
             placeholder={es.slots.searchPlaceholder}
@@ -270,53 +616,54 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
             onChange={(e) => setSlotSearch(e.target.value)}
           />
           {showCreateSlot && (
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleCreateSlot}
-              disabled={creatingSlot}
-            >
+            <Button className="w-full" onClick={handleCreateSlot} disabled={creatingSlot}>
               {es.slots.createFromSearch.replace("{number}", slotSearch.trim())}
             </Button>
           )}
-          <div className="grid grid-cols-3 gap-2">
-            {filteredSlots.map((slot) => (
-              <Button
-                key={slot.id}
-                variant="outline"
-                onClick={() => {
-                  setSelectedSlot(slot);
-                  setStep(2);
-                }}
-              >
-                {slot.number}
-              </Button>
-            ))}
-          </div>
+          {filteredSlots.length === 0 && slotSearch.trim() && !showCreateSlot ? (
+            <p className="text-sm text-muted">{es.app.noResults}</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {filteredSlots.map((slot) => (
+                <SlotCardButton
+                  key={slot.id}
+                  number={slot.number}
+                  status={slot.status}
+                  onClick={() => {
+                    setSelectedSlot(slot);
+                    setStep(2);
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
       {step === 2 && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="space-y-3">
             <h2 className="text-2xl font-bold">{es.inventory.addDonation}</h2>
-            <span className="rounded-full bg-surface-2 px-3 py-1 text-sm font-medium">
-              {es.slots.title} {selectedSlot?.number}
-            </span>
+            {selectedSlot && (
+              <SlotHeader number={selectedSlot.number} onChangeSlot={handleChangeSlot} />
+            )}
           </div>
 
           {pendingItems.length > 0 && (
             <Card className="border-border bg-surface-1">
               <CardHeader>
                 <CardTitle className="text-base">
-                  {pendingItems.length} artículo(s) agregado(s)
+                  {es.inventory.addedItems.replace("{count}", String(pendingItems.length))}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {pendingItems.map((item, i) => (
-                  <div key={i} className="text-sm">
-                    {item.description} × {item.quantity}
-                  </div>
+                {pendingItems.map((item) => (
+                  <PendingItemRow
+                    key={item.id}
+                    item={item}
+                    onEdit={() => handleEditPending(item.id)}
+                    onRemove={() => handleRemovePending(item.id)}
+                  />
                 ))}
               </CardContent>
             </Card>
@@ -333,6 +680,7 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
                     setSelectedItem(null);
                   }}
                   placeholder={es.inventory.searchPlaceholder}
+                  className="capitalize"
                 />
                 {existingItems.length > 0 && !selectedItem && (
                   <div className="space-y-1 rounded-lg border border-border p-2">
@@ -341,58 +689,136 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
                         key={item.id}
                         type="button"
                         className="block w-full rounded p-2 text-left hover:bg-surface-2"
-                        onClick={() => {
-                          setSelectedItem(item);
-                          setForm({
-                            subcategory: item.subcategory ?? "",
-                            description: item.description,
-                            presentation: item.presentation ?? "",
-                            quantity: 1,
-                            unit_of_measurement: item.unit_of_measurement ?? "",
-                            notes: "",
-                          });
-                          setItemSearch(item.description);
-                        }}
+                        onClick={() => fillFormFromItem(item)}
                       >
-                        {item.description} — {item.subcategory}
+                        <DonationItemPreview
+                          description={item.description}
+                          presentation={item.presentation}
+                          unit_of_measurement={item.unit_of_measurement}
+                          subcategory={item.subcategory}
+                          category={item.category}
+                          status={item.status}
+                          showQuantity={false}
+                        />
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {!selectedItem && (
-                <>
-                  <div className="space-y-2">
-                    <Label>{es.inventory.subcategory}</Label>
-                    <Input
-                      value={form.subcategory}
-                      onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{es.inventory.description_label}</Label>
-                    <Input
-                      value={form.description}
-                      onChange={(e) => setForm({ ...form, description: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{es.inventory.presentation}</Label>
-                    <Input
-                      value={form.presentation}
-                      onChange={(e) => setForm({ ...form, presentation: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{es.inventory.unit}</Label>
-                    <Input
-                      value={form.unit_of_measurement}
-                      onChange={(e) => setForm({ ...form, unit_of_measurement: e.target.value })}
-                    />
-                  </div>
-                </>
+              {selectedItem && (
+                <p
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-sm",
+                    isExistingMatch
+                      ? "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200"
+                      : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200"
+                  )}
+                >
+                  {isExistingMatch ? es.inventory.existingItemHint : es.inventory.variantHint}
+                </p>
               )}
+
+              <div className="space-y-3 rounded-lg border border-border bg-surface-2/50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {es.inventory.category}
+                </p>
+                <div className="space-y-2">
+                  <select
+                    className={selectClassName}
+                    value={taxonomy.categories.includes(form.category) ? form.category : ""}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                  >
+                    <option value="">{es.inventory.selectCategory}</option>
+                    {taxonomy.categories.map((category) => (
+                      <option key={category} value={category}>
+                        {capitalizeWords(category)}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    value={form.category}
+                    onChange={(e) => updateForm({ category: e.target.value })}
+                    onBlur={() => handleTextBlur("category")}
+                    placeholder={es.inventory.customCategory}
+                    className="capitalize"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  {es.inventory.subcategory}{" "}
+                  <span className="font-normal normal-case">({es.inventory.subcategoryOptional})</span>
+                </p>
+                <div className="space-y-2">
+                  <select
+                    className={selectClassName}
+                    value={selectedSubcategoryKey}
+                    onChange={(e) => handleSubcategorySelect(e.target.value)}
+                  >
+                    <option value="">{es.inventory.selectSubcategory}</option>
+                    {form.category ? (
+                      subcategoryOptions.map((subcategory) => (
+                        <option
+                          key={subcategory}
+                          value={subcategoryOptionValue(form.category, subcategory)}
+                        >
+                          {capitalizeWords(subcategory)}
+                        </option>
+                      ))
+                    ) : (
+                      taxonomy.categories.map((category) => (
+                        <optgroup key={category} label={capitalizeWords(category)}>
+                          {(taxonomy.subcategoriesByCategory[category] ?? []).map((subcategory) => (
+                            <option
+                              key={subcategoryOptionValue(category, subcategory)}
+                              value={subcategoryOptionValue(category, subcategory)}
+                            >
+                              {capitalizeWords(subcategory)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))
+                    )}
+                  </select>
+                  <Input
+                    value={form.subcategory}
+                    onChange={(e) => updateForm({ subcategory: e.target.value })}
+                    onBlur={() => handleTextBlur("subcategory")}
+                    placeholder={es.inventory.customSubcategory}
+                    className="capitalize"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{es.inventory.description_label}</Label>
+                <Input
+                  value={form.description}
+                  onChange={(e) => updateForm({ description: e.target.value })}
+                  onBlur={() => handleTextBlur("description")}
+                  className="capitalize"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{es.inventory.presentation}</Label>
+                <Input
+                  value={form.presentation}
+                  onChange={(e) => updateForm({ presentation: e.target.value })}
+                  onBlur={() => handleTextBlur("presentation")}
+                  className="capitalize"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{es.inventory.unit}</Label>
+                <Input
+                  value={form.unit_of_measurement}
+                  onChange={(e) => updateForm({ unit_of_measurement: e.target.value })}
+                  onBlur={() => handleTextBlur("unit_of_measurement")}
+                  className="capitalize"
+                />
+              </div>
 
               <div className="space-y-2">
                 <Label>{es.inventory.quantity}</Label>
@@ -401,7 +827,7 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
                   min={1}
                   value={form.quantity}
                   onChange={(e) =>
-                    setForm({ ...form, quantity: Math.max(1, parseInt(e.target.value) || 1) })
+                    updateForm({ quantity: Math.max(1, parseInt(e.target.value) || 1) })
                   }
                 />
               </div>
@@ -409,21 +835,33 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
                 <Label>{es.inventory.notes}</Label>
                 <Input
                   value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  onChange={(e) => updateForm({ notes: e.target.value })}
                 />
               </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
 
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" onClick={handleAddItem}>
-                  {es.inventory.addAnother}
-                </Button>
-                {pendingItems.length > 0 && (
-                  <Button type="button" variant="secondary" onClick={() => setStep(3)}>
+              <div className="space-y-3 border-t border-border pt-4">
+                <p className="text-xs text-muted">{es.inventory.donationActionsHint}</p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={handleGoToReview}
+                    disabled={!canReview}
+                  >
                     {es.inventory.review}
                   </Button>
-                )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full text-muted"
+                    onClick={handleAddItem}
+                    disabled={!canAddFromForm}
+                  >
+                    {pendingItems.length > 0 ? es.inventory.addAnother : es.inventory.addToList}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -432,25 +870,63 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
 
       {step === 3 && (
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold">{es.inventory.review}</h2>
-          <p className="text-sm text-muted">
-            {es.slots.title} {selectedSlot?.number}
-          </p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold">{es.inventory.review}</h2>
+              <p className="mt-1 text-sm text-muted">{es.inventory.reviewSummary}</p>
+            </div>
+            <Badge variant="secondary">{pendingItems.length}</Badge>
+          </div>
+
+          {selectedSlot && (
+            <Card className="border-border bg-surface-1">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">{es.inventory.reviewDestination}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-3xl font-bold tracking-tight">{selectedSlot.number}</p>
+                    <p className="text-sm text-muted">
+                      {es.slots.statuses[selectedSlot.status]}
+                    </p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={handleChangeSlot}>
+                    {es.inventory.changeSlot}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-border bg-surface-1">
-            <CardContent className="space-y-3 p-4">
-              {pendingItems.map((item, i) => (
-                <div key={i} className="flex justify-between border-b border-border pb-2 text-sm">
-                  <span>{item.description}</span>
-                  <span className="font-medium">× {item.quantity}</span>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-base">{es.inventory.reviewItemsTitle}</CardTitle>
+                <span className="text-xs text-muted">
+                  {es.inventory.totalQuantity.replace("{count}", String(totalQuantity))}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {pendingItems.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border bg-surface-0/50 p-3">
+                  <PendingItemRow
+                    item={item}
+                    onEdit={() => handleEditPending(item.id)}
+                    onRemove={() => handleRemovePending(item.id)}
+                    compact
+                  />
                 </div>
               ))}
             </CardContent>
           </Card>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(2)}>
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" className="flex-1" onClick={() => setStep(2)}>
               {es.app.back}
             </Button>
-            <Button onClick={handleFinish} disabled={saving}>
+            <Button className="flex-1" onClick={handleFinish} disabled={saving}>
               {saving ? es.app.loading : es.inventory.finishRegistration}
             </Button>
           </div>

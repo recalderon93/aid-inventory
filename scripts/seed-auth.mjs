@@ -61,6 +61,20 @@ const users = [
   { email: "collaborator@aid-inventory.local", password: "password123", role: "collaborator", name: "Collaborator User" },
 ];
 
+async function upsertProfile(supabase, row) {
+  const { error } = await supabase.from("profiles").upsert(row);
+  if (!error) return true;
+
+  // Fallback when migration 00014 (first_name, last_name) is not applied yet.
+  const { first_name: _f, last_name: _l, ...base } = row;
+  const { error: fallbackError } = await supabase.from("profiles").upsert(base);
+  if (fallbackError) {
+    console.error(`Profile upsert failed for ${row.email}:`, fallbackError.message);
+    return false;
+  }
+  return true;
+}
+
 for (const user of users) {
   const { data, error } = await supabase.auth.admin.createUser({
     email: user.email,
@@ -69,17 +83,37 @@ for (const user of users) {
     user_metadata: { role: user.role, name: user.name },
   });
 
+  const [firstName, ...rest] = user.name.split(" ");
+  const lastName = rest.join(" ") || "";
+
   if (error) {
     console.log(`User ${user.email}: ${error.message}`);
+    const { data: listed } = await supabase.auth.admin.listUsers();
+    const existing = listed?.users?.find((u) => u.email === user.email);
+    if (existing) {
+      const ok = await upsertProfile(supabase, {
+        id: existing.id,
+        email: user.email,
+        name: user.name,
+        first_name: firstName,
+        last_name: lastName,
+        role: user.role,
+        status: "active",
+      });
+      console.log(ok ? `Ensured profile for ${user.email}` : `Failed profile for ${user.email}`);
+    }
   } else {
     console.log(`Created ${user.email} (${data.user.id})`);
-    await supabase.from("profiles").upsert({
+    const ok = await upsertProfile(supabase, {
       id: data.user.id,
       email: user.email,
       name: user.name,
+      first_name: firstName,
+      last_name: lastName,
       role: user.role,
       status: "active",
     });
+    if (!ok) console.error(`Failed profile for ${user.email}`);
   }
 }
 

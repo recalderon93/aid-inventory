@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { ensureUserProfile } from "@/lib/ensure-profile";
+import { loginAction } from "@/app/login/actions";
 import { es } from "@/locales/es";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +11,21 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Logo } from "@/components/logo";
+
+function mapAuthError(message?: string): string {
+  if (!message) return es.auth.loginError;
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("invalid login credentials") ||
+    normalized.includes("invalid email or password")
+  ) {
+    return es.auth.loginError;
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "Confirme su correo electrónico antes de iniciar sesión.";
+  }
+  return es.auth.accountNotFound;
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -25,32 +39,21 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    const supabase = createClient();
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const result = await loginAction(email, password);
 
-    if (authError) {
-      setError(es.auth.accountNotFound);
+    if (!result.ok) {
+      if (result.reason === "auth_error") {
+        setError(mapAuthError(result.message));
+      } else if (result.reason === "no_profile") {
+        setError(es.auth.profileNotFound);
+      } else if (result.reason === "inactive") {
+        setError(es.auth.accountInactive);
+      } else {
+        setError(es.auth.accountNotFound);
+      }
       setLoading(false);
       return;
     }
-
-    if (!data.user) {
-      setError(es.auth.loginError);
-      setLoading(false);
-      return;
-    }
-
-    const profileResult = await ensureUserProfile(supabase, data.user);
-    if (!profileResult.ok) {
-      setError(es.auth.accountNotFound);
-      setLoading(false);
-      return;
-    }
-
-    await supabase
-      .from("profiles")
-      .update({ last_login_at: new Date().toISOString() })
-      .eq("id", data.user.id);
 
     router.push("/slots");
     router.refresh();

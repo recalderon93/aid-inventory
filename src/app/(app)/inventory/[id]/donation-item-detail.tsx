@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { es } from "@/locales/es";
 import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { DonationItemPreview } from "@/components/donation-item-preview";
 import { SectionHeader } from "@/components/section-header";
 import type { DonationItem, InventoryRow } from "@/types/database";
 import { Boxes } from "lucide-react";
@@ -44,25 +45,16 @@ export function DonationItemDetail({ id }: { id: string }) {
       <h2 className="text-2xl font-bold">{es.inventory.detail}</h2>
 
       <Card className="border-border bg-surface-1">
-        <CardHeader>
-          <CardTitle>{item.description}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <strong>{es.inventory.subcategory}:</strong> {item.subcategory}
-          </p>
-          <p>
-            <strong>{es.inventory.category}:</strong> {item.category}
-          </p>
-          <p>
-            <strong>{es.inventory.presentation}:</strong> {item.presentation ?? "—"}
-          </p>
-          <p>
-            <strong>{es.inventory.unit}:</strong> {item.unit_of_measurement ?? "—"}
-          </p>
-          <p className="text-lg font-bold">
-            {es.inventory.totalAvailable}: {totalQty}
-          </p>
+        <CardContent className="p-4">
+          <DonationItemPreview
+            description={item.description}
+            presentation={item.presentation}
+            unit_of_measurement={item.unit_of_measurement}
+            subcategory={item.subcategory}
+            category={item.category}
+            status={item.status}
+            quantity={totalQty}
+          />
         </CardContent>
       </Card>
 

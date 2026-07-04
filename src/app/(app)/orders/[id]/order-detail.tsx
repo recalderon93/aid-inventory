@@ -9,6 +9,7 @@ import { es } from "@/locales/es";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DonationItemPreview } from "@/components/donation-item-preview";
 import { SectionHeader } from "@/components/section-header";
 import { ListSkeleton } from "@/components/list-skeleton";
 import { useToast } from "@/components/ui/toast";
@@ -39,6 +40,7 @@ export function OrderDetail({ id }: { id: string }) {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [history, setHistory] = useState<OrderHistory[]>([]);
   const [suggestions, setSuggestions] = useState<FulfillmentSuggestion[]>([]);
+  const [availabilityByItemId, setAvailabilityByItemId] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [fulfilling, setFulfilling] = useState(false);
 
@@ -63,6 +65,7 @@ export function OrderDetail({ id }: { id: string }) {
     setHistory(historyData ?? []);
 
     const suggs: FulfillmentSuggestion[] = [];
+    const availability: Record<string, number> = {};
     for (const item of itemsData ?? []) {
       if (!item.donation_item_id) continue;
       const { data: inv } = await supabase
@@ -70,6 +73,9 @@ export function OrderDetail({ id }: { id: string }) {
         .select("slot_id, quantity, slot:slots(number)")
         .eq("donation_item_id", item.donation_item_id)
         .gt("quantity", 0);
+
+      const totalAvailable = (inv ?? []).reduce((sum, row) => sum + row.quantity, 0);
+      availability[item.id] = totalAvailable;
 
       const { suggestions: s } = suggestSlotsForItem(
         (inv ?? []).map((r) => {
@@ -90,6 +96,7 @@ export function OrderDetail({ id }: { id: string }) {
       });
     }
     setSuggestions(suggs);
+    setAvailabilityByItemId(availability);
     setLoading(false);
   }, [id]);
 
@@ -255,8 +262,17 @@ export function OrderDetail({ id }: { id: string }) {
         <CardContent className="space-y-3">
           {items.map((item) => (
             <div key={item.id} className="rounded-lg border border-border p-3">
-              <p className="font-medium">{item.donation_item?.description}</p>
-              <p className="text-sm">
+              <DonationItemPreview
+                description={item.donation_item?.description ?? ""}
+                presentation={item.donation_item?.presentation}
+                unit_of_measurement={item.donation_item?.unit_of_measurement}
+                subcategory={item.donation_item?.subcategory}
+                category={item.donation_item?.category}
+                status={item.donation_item?.status}
+                quantity={availabilityByItemId[item.id]}
+                showQuantity={false}
+              />
+              <p className="mt-1 text-xs text-muted">
                 {es.orders.requested}: {item.requested_quantity} · {es.orders.fulfill}:{" "}
                 {item.fulfilled_quantity}
               </p>
@@ -271,16 +287,29 @@ export function OrderDetail({ id }: { id: string }) {
             <CardTitle>{es.orders.suggestedSlots}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {suggestions.map((s) => (
-              <div key={s.order_item_id}>
-                <p className="font-medium">{s.description}</p>
-                {s.suggestions.map((pick) => (
-                  <p key={pick.slot_id} className="text-sm text-muted">
-                    {es.slots.title} {pick.slot_number}: {pick.quantity}
-                  </p>
-                ))}
-              </div>
-            ))}
+            {suggestions.map((s) => {
+              const orderItem = items.find((item) => item.id === s.order_item_id);
+              const donationItem = orderItem?.donation_item;
+              return (
+                <div key={s.order_item_id}>
+                  <DonationItemPreview
+                    description={donationItem?.description ?? s.description}
+                    presentation={donationItem?.presentation}
+                    unit_of_measurement={donationItem?.unit_of_measurement}
+                    subcategory={donationItem?.subcategory}
+                    category={donationItem?.category}
+                    status={donationItem?.status}
+                    quantity={availabilityByItemId[s.order_item_id]}
+                    showQuantity={false}
+                  />
+                  {s.suggestions.map((pick) => (
+                    <p key={pick.slot_id} className="mt-1 text-xs text-muted">
+                      {es.slots.title} {pick.slot_number}: {pick.quantity}
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

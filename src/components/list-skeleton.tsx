@@ -10,7 +10,7 @@ interface ListSkeletonProps {
 export function ListSkeleton({ variant = "list", count = 4, className }: ListSkeletonProps) {
   if (variant === "grid") {
     return (
-      <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3", className)}>
+      <div className={cn("grid grid-cols-3 gap-2 sm:gap-3", className)}>
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="rounded-xl border border-border bg-surface-1 p-4">
             <Skeleton className="mb-2 h-5 w-16" />

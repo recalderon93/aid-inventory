@@ -11,3 +11,14 @@ export function formatDate(date: string | Date) {
     timeStyle: "short",
   }).format(new Date(date));
 }
+
+export function capitalizeWords(text: string) {
+  if (!text.trim()) return text;
+  return text
+    .toLowerCase()
+    .replace(/(^|[\s\-/])(\S)/g, (_, sep, char) => `${sep}${char.toUpperCase()}`);
+}
+
+export function normalizeText(text: string) {
+  return text.trim().toLowerCase();
+}

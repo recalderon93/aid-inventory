@@ -48,22 +48,29 @@ npx playwright install
 
 ## CI (GitHub Actions)
 
-Run on PRs to `develop`:
+Workflow: `.github/workflows/ci.yml` — runs on push/PR to `master` and `develop`:
 
 ```yaml
 - lint
+- typecheck
 - unit tests
 - build
 - e2e (optional, against preview deploy)
 ```
+
+## Pre-commit (Husky)
+
+Local hook (`.husky/pre-commit`) runs `lint-staged`: ESLint fix + Prettier on staged files.
+Install hooks after clone: `npm install` (runs `prepare` → `husky`).
 
 ## When to introduce
 
 | Phase | Tests |
 |-------|-------|
 | MVP | Manual only |
-| Post-MVP stable | Unit + integration for fulfillment |
-| Pre-production | E2E for critical paths |
+| Pre-production (v1) | Unit tests for permissions, export, search, taxonomy (`npm test`) |
+| Post-v1 stable | Integration for fulfillment + API routes |
+| Production hardening | E2E for critical paths (Playwright) |
 
 ## Coverage goals
 
