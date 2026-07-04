@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { es } from "@/locales/es";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { canManageImportReview } from "@/lib/permissions";
-import { PageHeader } from "@/components/page-header";
+import { useRefreshableList } from "@/hooks/use-refreshable-list";
+import { listScrollKey, queryKeys } from "@/lib/query-keys";
+import { ListPageShell } from "@/components/list-page-shell";
 import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -55,8 +57,7 @@ export default function ImportReviewPage() {
   const router = useRouter();
   const { profile, loading: profileLoading } = useUserProfile();
   const { showToast } = useToast();
-  const [items, setItems] = useState<ImportReviewItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [canLoad, setCanLoad] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("PENDING_REVIEW");
   const [warningFilter, setWarningFilter] = useState<string>("all");
   const [actionFilter, setActionFilter] = useState<string>("all");
@@ -65,6 +66,15 @@ export default function ImportReviewPage() {
   const [selected, setSelected] = useState<ImportReviewItem | null>(null);
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const filterKey = {
+    status: statusFilter,
+    warning: warningFilter,
+    action: actionFilter,
+    entity: entityFilter,
+    search: search.trim(),
+  };
+  const scrollKey = listScrollKey(queryKeys.importReview(filterKey));
 
   const loadItems = useCallback(async () => {
     const params = new URLSearchParams();
@@ -75,10 +85,8 @@ export default function ImportReviewPage() {
     if (search.trim()) params.set("search", search.trim());
 
     const res = await fetch(`/api/admin/import-review?${params.toString()}`);
-    if (res.ok) {
-      setItems(await res.json());
-    }
-    setLoading(false);
+    if (!res.ok) return [] as ImportReviewItem[];
+    return (await res.json()) as ImportReviewItem[];
   }, [statusFilter, warningFilter, actionFilter, entityFilter, search]);
 
   useEffect(() => {
@@ -87,9 +95,17 @@ export default function ImportReviewPage() {
       router.replace("/slots");
       return;
     }
-    setLoading(true);
-    loadItems();
-  }, [profile, profileLoading, router, loadItems]);
+    setCanLoad(true);
+  }, [profile, profileLoading, router]);
+
+  const { data: items = [], initialLoading, refreshing, hasCachedData, refresh } = useRefreshableList(
+    queryKeys.importReview(filterKey),
+    loadItems,
+    {
+      enabled: canLoad,
+      pollIntervalMs: 120_000,
+    }
+  );
 
   const warningCodes = useMemo(
     () => [...new Set(items.map((i) => i.warning_code))].sort(),
@@ -122,7 +138,7 @@ export default function ImportReviewPage() {
       );
       setSelected(null);
       setResolutionNotes("");
-      await loadItems();
+      await refresh();
     } else {
       showToast(es.app.error);
     }
@@ -145,18 +161,24 @@ export default function ImportReviewPage() {
     return null;
   }
 
-  if (profileLoading || loading) {
+  if (profileLoading || !canLoad) {
     return (
-      <div className="space-y-4">
-        <PageHeader title={es.importReview.title} description={es.importReview.description} />
+      <ListPageShell title={es.importReview.title} description={es.importReview.description} onRefresh={() => {}}>
         <ListSkeleton />
-      </div>
+      </ListPageShell>
     );
   }
 
   return (
-    <div className="space-y-4 pb-8">
-      <PageHeader title={es.importReview.title} description={es.importReview.description} />
+    <ListPageShell
+      title={es.importReview.title}
+      description={es.importReview.description}
+      onRefresh={refresh}
+      refreshing={refreshing}
+      scrollKey={scrollKey}
+      scrollReady={!initialLoading}
+      hasCachedData={hasCachedData}
+    >
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-1">
@@ -228,7 +250,9 @@ export default function ImportReviewPage() {
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {initialLoading ? (
+        <ListSkeleton />
+      ) : items.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
           title={es.importReview.empty}
@@ -349,6 +373,6 @@ export default function ImportReviewPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </ListPageShell>
   );
 }

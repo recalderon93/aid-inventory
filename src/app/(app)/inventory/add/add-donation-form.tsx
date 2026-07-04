@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ensureUserProfile } from "@/lib/ensure-profile";
 import { inferCategory, canCreateSlots } from "@/lib/permissions";
 import { buildDonationTaxonomy, mergeTaxonomyEntry, type DonationTaxonomy } from "@/lib/donation-taxonomy";
-import { filterSlots, hasExactSlotMatch } from "@/lib/slot-search";
+import { filterSlots, hasExactSlotMatch, sortSlotsByNumber } from "@/lib/slot-search";
 import { createSlot } from "@/lib/slot-create";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { es } from "@/locales/es";
@@ -188,14 +188,11 @@ export function AddDonationForm({ preselectedSlotId }: { preselectedSlotId?: str
   useEffect(() => {
     async function loadSlots() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("slots")
-        .select("*")
-        .is("deleted_at", null)
-        .order("number");
-      setSlots(data ?? []);
+      const { data } = await supabase.from("slots").select("*").is("deleted_at", null);
+      const ordered = sortSlotsByNumber(data ?? []);
+      setSlots(ordered);
       if (preselectedSlotId) {
-        const slot = data?.find((s) => s.id === preselectedSlotId) ?? null;
+        const slot = ordered.find((s) => s.id === preselectedSlotId) ?? null;
         setSelectedSlot(slot);
       }
     }

@@ -122,7 +122,7 @@ export default function NewUserPage() {
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <Button type="submit" disabled={loading}>
-              {loading ? es.app.loading : es.users.create}
+              {loading ? es.app.loading : es.users.createSubmit}
             </Button>
           </form>
         </CardContent>

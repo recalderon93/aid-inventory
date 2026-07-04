@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { es } from "@/locales/es";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { canManageUsers } from "@/lib/permissions";
-import { PageHeader } from "@/components/page-header";
+import { useRefreshableList } from "@/hooks/use-refreshable-list";
+import { listScrollKey, queryKeys } from "@/lib/query-keys";
+import { ListPageShell } from "@/components/list-page-shell";
 import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
@@ -30,8 +32,8 @@ export default function UsersPage() {
   const router = useRouter();
   const { profile, loading: profileLoading } = useUserProfile();
   const { showToast } = useToast();
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [canLoad, setCanLoad] = useState(false);
+  const scrollKey = listScrollKey(queryKeys.users());
   const [confirmAction, setConfirmAction] = useState<{
     id: string;
     action: "disable" | "hold" | "soft_delete";
@@ -43,17 +45,23 @@ export default function UsersPage() {
       router.replace("/slots");
       return;
     }
-    loadUsers();
+    setCanLoad(true);
   }, [profile, profileLoading, router]);
 
-  async function loadUsers() {
+  const loadUsers = useCallback(async () => {
     const res = await fetch("/api/admin/users");
-    if (res.ok) {
-      const data = await res.json();
-      setUsers(data);
+    if (!res.ok) return [] as Profile[];
+    return (await res.json()) as Profile[];
+  }, []);
+
+  const { data: users = [], initialLoading, refreshing, hasCachedData, refresh } = useRefreshableList(
+    queryKeys.users(),
+    loadUsers,
+    {
+      enabled: canLoad,
+      pollIntervalMs: 120_000,
     }
-    setLoading(false);
-  }
+  );
 
   async function handleAction(id: string, action: "disable" | "hold" | "reactivate" | "soft_delete") {
     const res = await fetch("/api/admin/users", {
@@ -69,32 +77,39 @@ export default function UsersPage() {
         soft_delete: es.users.disabled,
       };
       showToast(messages[action]);
-      await loadUsers();
+      await refresh();
     }
     setConfirmAction(null);
   }
 
-  if (profileLoading || loading) {
+  if (profileLoading || !canLoad) {
     return (
       <div className="space-y-4">
-        <PageHeader title={es.users.title} description={es.users.description} />
-        <ListSkeleton count={5} />
+        <ListPageShell title={es.users.title} description={es.users.description} onRefresh={() => {}}>
+          <ListSkeleton count={5} />
+        </ListPageShell>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={es.users.title}
-        description={es.users.description}
-        action={
-          <Button size="sm" onClick={() => router.push("/users/new")}>
+    <ListPageShell
+      title={es.users.title}
+      description={es.users.description}
+      onRefresh={refresh}
+      refreshing={refreshing}
+      scrollKey={scrollKey}
+      scrollReady={!initialLoading}
+      hasCachedData={hasCachedData}
+      action={
+        <Link href="/users/new">
+          <Button size="sm">
             <Plus className="h-4 w-4" />
             {es.users.create}
           </Button>
-        }
-      />
+        </Link>
+      }
+    >
 
       <section className="space-y-3">
         <SectionHeader title={es.users.dataSection} />
@@ -124,15 +139,17 @@ export default function UsersPage() {
 
       <SectionHeader title={es.users.usersSection} />
 
-      {users.length === 0 ? (
+      {initialLoading ? (
+        <ListSkeleton count={5} />
+      ) : users.length === 0 ? (
         <EmptyState
           icon={Users}
           title={es.users.empty}
           description={es.users.emptyDescription}
           action={
-            <Button size="sm" onClick={() => router.push("/users/new")}>
-              {es.users.create}
-            </Button>
+            <Link href="/users/new">
+              <Button size="sm">{es.users.create}</Button>
+            </Link>
           }
         />
       ) : (
@@ -227,6 +244,6 @@ export default function UsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ListPageShell>
   );
 }

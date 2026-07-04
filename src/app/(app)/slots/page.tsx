@@ -1,16 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
-import { filterSlots, hasExactSlotMatch } from "@/lib/slot-search";
 import { createSlot } from "@/lib/slot-create";
 import { useUserProfile } from "@/contexts/user-profile-context";
 import { canCreateSlots } from "@/lib/permissions";
+import { useInfiniteRefreshableList } from "@/hooks/use-infinite-refreshable-list";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import {
+  clearSlotsListCache,
+  fetchAllSlotNumbers,
+  fetchSlotsPage,
+} from "@/lib/slots-list";
+import { listScrollKey, queryKeys } from "@/lib/query-keys";
 import { es } from "@/locales/es";
-import { PageHeader } from "@/components/page-header";
+import { ListPageShell } from "@/components/list-page-shell";
 import { ListSkeleton } from "@/components/list-skeleton";
 import { EmptyState } from "@/components/empty-state";
+import { InfiniteScrollSentinel } from "@/components/infinite-scroll-sentinel";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -20,27 +29,48 @@ import { Boxes } from "lucide-react";
 
 export default function SlotsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { profile } = useUserProfile();
   const { showToast } = useToast();
-  const [slots, setSlots] = useState<Slot[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [creating, setCreating] = useState(false);
 
-  async function loadSlots() {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("slots")
-      .select("*")
-      .is("deleted_at", null)
-      .order("number");
-    setSlots(data ?? []);
-    setLoading(false);
-  }
-
   useEffect(() => {
-    loadSlots();
-  }, []);
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const scrollKey = listScrollKey(queryKeys.slots(debouncedSearch));
+
+  const fetchPage = useCallback(
+    (page: number) => fetchSlotsPage(page, debouncedSearch),
+    [debouncedSearch]
+  );
+
+  const { items: slots, initialLoading, refreshing, loadingMore, hasMore, hasCachedData, refresh, loadMore } =
+    useInfiniteRefreshableList<Slot>({
+      queryKey: queryKeys.slots(debouncedSearch),
+      fetchPage,
+      getItemId: (slot) => slot.id,
+      pollIntervalMs: 60_000,
+    });
+
+  const { data: knownNumbers = [] } = useQuery({
+    queryKey: queryKeys.slotsNumbers(),
+    queryFn: fetchAllSlotNumbers,
+    staleTime: 3 * 60 * 1000,
+  });
+
+  const sentinelRef = useInfiniteScroll(loadMore, {
+    enabled: hasMore && !loadingMore && !initialLoading,
+  });
+
+  function handleRefresh() {
+    clearSlotsListCache();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.slotsNumbers() });
+    refresh();
+  }
 
   async function handleCreate(number?: string) {
     const n = (number ?? search).trim();
@@ -56,20 +86,30 @@ export default function SlotsPage() {
     }
 
     showToast(es.slots.created_success);
+    clearSlotsListCache();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.slotsNumbers() });
+    void queryClient.invalidateQueries({ queryKey: ["slots", "list"] });
     router.push(`/slots/${slot.id}`);
   }
 
-  const filtered = filterSlots(slots, search);
   const canCreate = profile ? canCreateSlots(profile.role) : false;
-  const showCreateBanner =
-    search.trim() && !hasExactSlotMatch(slots, search) && canCreate;
-
-  const createButtonLabel = es.slots.createFromSearch.replace("{number}", search.trim());
+  const trimmedSearch = search.trim();
+  const numberExists = knownNumbers.some(
+    (n) => n.toLowerCase() === trimmedSearch.toLowerCase()
+  );
+  const showCreateBanner = trimmedSearch && !numberExists && canCreate;
+  const createButtonLabel = es.slots.createFromSearch.replace("{number}", trimmedSearch);
 
   return (
-    <div className="space-y-4">
-      <PageHeader title={es.slots.title} description={es.slots.description} />
-
+    <ListPageShell
+      title={es.slots.title}
+      description={es.slots.description}
+      onRefresh={handleRefresh}
+      refreshing={refreshing}
+      scrollKey={scrollKey}
+      scrollReady={!initialLoading}
+      hasCachedData={hasCachedData}
+    >
       <Input
         placeholder={es.slots.searchPlaceholder}
         value={search}
@@ -83,19 +123,19 @@ export default function SlotsPage() {
         </Button>
       )}
 
-      {loading ? (
+      {initialLoading ? (
         <ListSkeleton variant="grid" count={6} />
-      ) : filtered.length === 0 ? (
+      ) : slots.length === 0 ? (
         <EmptyState
           icon={Boxes}
-          title={search.trim() ? es.app.noResults : es.slots.empty}
-          description={search.trim() ? es.slots.searchHint : es.slots.emptyDescription}
+          title={trimmedSearch ? es.app.noResults : es.slots.empty}
+          description={trimmedSearch ? es.slots.searchHint : es.slots.emptyDescription}
           action={
             showCreateBanner ? (
               <Button size="sm" onClick={() => handleCreate()} disabled={creating}>
                 {createButtonLabel}
               </Button>
-            ) : canCreate && !search.trim() ? (
+            ) : canCreate && !trimmedSearch ? (
               <Button size="sm" onClick={() => handleCreate("1")} disabled={creating}>
                 {es.slots.create}
               </Button>
@@ -105,7 +145,7 @@ export default function SlotsPage() {
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {filtered.map((slot) => (
+            {slots.map((slot) => (
               <SlotCardLink
                 key={slot.id}
                 href={`/slots/${slot.id}`}
@@ -114,6 +154,11 @@ export default function SlotsPage() {
               />
             ))}
           </div>
+          <InfiniteScrollSentinel
+            sentinelRef={sentinelRef}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+          />
           {showCreateBanner && (
             <Button className="w-full" variant="secondary" onClick={() => handleCreate()} disabled={creating}>
               {createButtonLabel}
@@ -121,6 +166,6 @@ export default function SlotsPage() {
           )}
         </div>
       )}
-    </div>
+    </ListPageShell>
   );
 }

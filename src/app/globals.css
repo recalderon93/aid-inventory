@@ -45,6 +45,19 @@ button {
   font-size: 16px;
 }
 
+select {
+  background-color: var(--surface-1);
+  color: var(--foreground);
+}
+
+.dark select {
+  color-scheme: dark;
+}
+
+:root select {
+  color-scheme: light;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

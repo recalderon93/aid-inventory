@@ -22,3 +22,7 @@ export function capitalizeWords(text: string) {
 export function normalizeText(text: string) {
   return text.trim().toLowerCase();
 }
+
+export function profileDisplayName(profile?: { name: string } | null) {
+  return profile?.name?.trim() || null;
+}
